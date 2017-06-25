@@ -1,0 +1,2 @@
+class Signal:
+    stopped = False
