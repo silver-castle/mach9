@@ -439,10 +439,6 @@ class Mach9:
         '''This kills the Mach9'''
         get_event_loop().stop()
 
-    def __call__(self):
-        '''gunicorn compatibility'''
-        return self
-
     async def create_server(self, host='127.0.0.1', port=8000, debug=False,
                             ssl=None, sock=None, backlog=100):
         '''Asynchronous version of `run`.
@@ -500,7 +496,7 @@ class Mach9:
 
         server_settings = {
             'protocol': self.protocol,
-            'request_handler': self.asgi_handler,
+            'request_handler': self,
             'error_handler': self.error_handler,
             'log': self.log,
             'netlog': self.netlog,
@@ -568,7 +564,7 @@ class Mach9:
     # -------------------------------------------------------------------- #
     # Request Handling
     # -------------------------------------------------------------------- #
-    async def asgi_handler(self, message, channels):
+    async def __call__(self, message, channels):
         try:
             # make request
             request = self.request_class(message)
