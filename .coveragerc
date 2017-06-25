@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = mach9
+omit = site-packages
+
+[html]
+directory = coverage
