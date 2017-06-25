@@ -14,7 +14,7 @@ from mach9.exceptions import ServerError, URLBuildError, Mach9Exception
 from mach9.handlers import ErrorHandler
 from mach9.log import log as _log
 from mach9.log import log as _netlog
-from mach9.response import HTTPResponse
+from mach9.response import HTTPResponse, StreamHTTPResponse
 from mach9.router import Router
 from mach9.signal import Signal
 from mach9.server import serve as _serve
@@ -35,7 +35,8 @@ class Mach9:
                  serve=None, serve_multiple=None, log=None, netlog=None,
                  log_config=LOGGING, update_current_time=None,
                  get_current_time=None, composition_view=None,
-                 body_channel_class=None, reply_channel_class=None):
+                 body_channel_class=None, reply_channel_class=None,
+                 stream_http_response_class=None):
 
         self.log = log or _log
 
@@ -72,6 +73,8 @@ class Mach9:
         self.protocol = protocol or HttpProtocol
         self.body_channel_class = body_channel_class or BodyChannel
         self.reply_channel_class = reply_channel_class or ReplyChannel
+        self.stream_http_response_class = (
+            stream_http_response_class or StreamHTTPResponse)
         self.debug = None
         self.sock = None
         self.listeners = defaultdict(list)
@@ -607,7 +610,12 @@ class Mach9:
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
-            _message = response.get_message(False)
+            if isinstance(response, self.stream_http_response_class):
+                while True:
+                    _message = await response.get_message()
+                    await channels['reply'].send(_message)
+            else:
+                _message = response.get_message(False)
         except Exception as e:
             # -------------------------------------------- #
             # Response Generation Failed

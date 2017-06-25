@@ -306,6 +306,17 @@ class HTTPResponse:
                )
 
 
+class StreamHTTPResponse(HTTPResponse):
+    pass
+
+
+def stream(body, status=200, headers=None,
+           content_type='text/plain; charset=utf-8'):
+    return StreamHTTPResponse(
+        body, status=status, headers=headers,
+        content_type=content_type)
+
+
 def json(body, status=200, headers=None, **kwargs):
     '''
     Returns response object with body in json format.
