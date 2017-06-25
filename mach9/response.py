@@ -271,40 +271,6 @@ class HTTPResponse:
             'more_content': more_content
         }
 
-    def output(
-            self, version='1.1', keep_alive=False, keep_alive_timeout=None):
-        # This is all returned in a kind-of funky way
-        # We tried to make this as fast as possible in pure python
-        timeout_header = b''
-        if keep_alive and keep_alive_timeout is not None:
-            timeout_header = b'Keep-Alive: %d\r\n' % keep_alive_timeout
-        self.headers['Content-Length'] = self.headers.get(
-            'Content-Length', len(self.body))
-        self.headers['Content-Type'] = self.headers.get(
-            'Content-Type', self.content_type)
-
-        headers = self._parse_headers()
-
-        # Try to pull from the common codes first
-        # Speeds up response rate 6% over pulling from all
-        status = COMMON_STATUS_CODES.get(self.status)
-        if not status:
-            status = ALL_STATUS_CODES.get(self.status, b'UNKNOWN RESPONSE')
-
-        return (b'HTTP/%b %d %b\r\n'
-                b'Connection: %b\r\n'
-                b'%b'
-                b'%b\r\n'
-                b'%b') % (
-                   version.encode(),
-                   self.status,
-                   status,
-                   b'keep-alive' if keep_alive else b'close',
-                   timeout_header,
-                   headers,
-                   self.body
-               )
-
 
 def json(body, status=200, headers=None, **kwargs):
     '''
