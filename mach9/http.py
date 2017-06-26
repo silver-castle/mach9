@@ -221,25 +221,40 @@ class HttpProtocol(asyncio.Protocol):
             'server': self.transport.get_extra_info('socketname')
         }
 
+    def after_write(self, more_content, keep_alive):
+        if not more_content and not keep_alive:
+            self.transport.close()
+        elif not more_content and keep_alive:
+            self._last_request_time = self.get_current_time()
+            self.cleanup()
+
     def send(self, message):
         transport = self.transport
         status = message.get('status')
         headers = message.get('headers')
         content = message.get('content')
         more_content = message.get('more_content', False)
+        keep_alive = self.keep_alive
+
+        if not status:
+            transport.write(content)
+            self.after_write(more_content, keep_alive)
+            return
 
         keep_alive_timeout = self.request_timeout
         timeout_header = b''
-        keep_alive = self.keep_alive
         if keep_alive and keep_alive_timeout is not None:
             timeout_header = b'Keep-Alive: %d\r\n' % keep_alive_timeout
 
         header_content = b''
         if headers is not None:
             _header_content = []
-            if not any(map(lambda h: h[0] == b'Content-Length', headers)):
-                _header_content.extend([
-                    b'Content-Length: ', str(len(content)).encode(), b'\r\n'])
+            if not more_content:
+                cl = any(map(lambda h: h[0] == b'Content-Length', headers))
+                if not cl:
+                    _header_content.extend([
+                        b'Content-Length: ',
+                        str(len(content)).encode(), b'\r\n'])
             for key, value in headers:
                 _header_content.extend([key, b': ', value, b'\r\n'])
             header_content = b''.join(_header_content)
@@ -258,11 +273,7 @@ class HttpProtocol(asyncio.Protocol):
                 content
             )
         transport.write(response)
-        if not more_content and not keep_alive:
-            transport.close()
-        elif not more_content and keep_alive:
-            self._last_request_time = self.get_current_time()
-            self.cleanup()
+        self.after_write(more_content, keep_alive)
 
     def write_error(self, exception):
         try:
@@ -270,7 +281,7 @@ class HttpProtocol(asyncio.Protocol):
             if self.message:
                 request = self.request_class(self.message)
             response = self.error_handler.response(request, exception)
-            self.send(response.get_message(True))
+            self.send(response.get_message(False))
             if self.has_log:
                 extra = {
                     'status': response.status,

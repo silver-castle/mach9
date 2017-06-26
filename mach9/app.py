@@ -14,7 +14,7 @@ from mach9.exceptions import ServerError, URLBuildError, Mach9Exception
 from mach9.handlers import ErrorHandler
 from mach9.log import log as _log
 from mach9.log import log as _netlog
-from mach9.response import HTTPResponse
+from mach9.response import HTTPResponse, StreamHTTPResponse
 from mach9.router import Router
 from mach9.signal import Signal
 from mach9.server import serve as _serve
@@ -35,7 +35,8 @@ class Mach9:
                  serve=None, serve_multiple=None, log=None, netlog=None,
                  log_config=LOGGING, update_current_time=None,
                  get_current_time=None, composition_view=None,
-                 body_channel_class=None, reply_channel_class=None):
+                 body_channel_class=None, reply_channel_class=None,
+                 stream_http_response_class=None):
 
         self.log = log or _log
 
@@ -60,6 +61,7 @@ class Mach9:
         _composition_view = composition_view or CompositionView
 
         self.name = name
+        self.composition_view_class = _composition_view
         self.router = router or Router(_composition_view)
         self.request_class = request_class or Request
         self.error_handler = error_handler or ErrorHandler(self.log)
@@ -72,6 +74,8 @@ class Mach9:
         self.protocol = protocol or HttpProtocol
         self.body_channel_class = body_channel_class or BodyChannel
         self.reply_channel_class = reply_channel_class or ReplyChannel
+        self.stream_http_response_class = (
+            stream_http_response_class or StreamHTTPResponse)
         self.debug = None
         self.sock = None
         self.listeners = defaultdict(list)
@@ -211,7 +215,7 @@ class Mach9:
                         stream = True
 
         # handle composition view differently
-        if isinstance(handler, CompositionView):
+        if isinstance(handler, self.composition_view_class):
             methods = handler.handlers.keys()
             for _handler in handler.handlers.values():
                 if hasattr(_handler, 'is_stream'):
@@ -600,9 +604,20 @@ class Mach9:
                 response = handler(request, *args, **kwargs)
                 if isawaitable(response):
                     response = await response
+                # response stream
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
+            if isinstance(response, self.stream_http_response_class):
+                _message = response.get_message(True)
+                await channels['reply'].send(_message)
+                await response.handler(
+                    ReplyChannelProxy(channels['reply']))
+                await channels['reply'].send({
+                    'content': b'0\r\n\r\n',
+                    'more_content': False
+                })
+                return
             _message = response.get_message(False)
         except Exception as e:
             # -------------------------------------------- #
@@ -636,3 +651,16 @@ class Mach9:
                 )
 
         await channels['reply'].send(_message)
+
+
+class ReplyChannelProxy:
+
+    def __init__(self, reply_channel):
+        self._reply_channel = reply_channel
+
+    async def send(self, content):
+        message = {
+            'content': b"%x\r\n%b\r\n" % (len(content), content),
+            'more_content': True
+        }
+        await self._reply_channel.send(message)
