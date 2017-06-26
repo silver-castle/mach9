@@ -61,6 +61,7 @@ class Mach9:
         _composition_view = composition_view or CompositionView
 
         self.name = name
+        self.composition_view_class = _composition_view
         self.router = router or Router(_composition_view)
         self.request_class = request_class or Request
         self.error_handler = error_handler or ErrorHandler(self.log)
@@ -214,7 +215,7 @@ class Mach9:
                         stream = True
 
         # handle composition view differently
-        if isinstance(handler, CompositionView):
+        if isinstance(handler, self.composition_view_class):
             methods = handler.handlers.keys()
             for _handler in handler.handlers.values():
                 if hasattr(_handler, 'is_stream'):
@@ -604,19 +605,19 @@ class Mach9:
                 if isawaitable(response):
                     response = await response
                 # response stream
-                if isinstance(response, self.stream_http_response_class):
-                    _message = response.get_message(True)
-                    await channels['reply'].send(_message)
-                    await response.handler(
-                        ReplyChannelProxy(channels['reply']))
-                    channels['reply'].send({
-                        'content': b'',
-                        'more_content': False
-                    })
-                    return
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
+            if isinstance(response, self.stream_http_response_class):
+                _message = response.get_message(True)
+                await channels['reply'].send(_message)
+                await response.handler(
+                    ReplyChannelProxy(channels['reply']))
+                await channels['reply'].send({
+                    'content': b'0\r\n\r\n',
+                    'more_content': False
+                })
+                return
             _message = response.get_message(False)
         except Exception as e:
             # -------------------------------------------- #
@@ -655,11 +656,11 @@ class Mach9:
 class ReplyChannelProxy:
 
     def __init__(self, reply_channel):
-        self._reply_channel
+        self._reply_channel = reply_channel
 
     async def send(self, content):
         message = {
-            'content': content,
+            'content': b"%x\r\n%b\r\n" % (len(content), content),
             'more_content': True
         }
-        self._reply_channel.send(message)
+        await self._reply_channel.send(message)

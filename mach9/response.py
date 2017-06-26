@@ -212,7 +212,6 @@ class MultiHeader:
 
 
 class HTTPResponse:
-    __slots__ = ('body', 'status', 'content_type', 'headers', '_cookies')
 
     def __init__(self, body=None, status=200, headers=None,
                  content_type='text/plain', body_bytes=b''):
@@ -264,13 +263,13 @@ class HTTPResponse:
 
 
 class StreamHTTPResponse(HTTPResponse):
-    __slots__ = ('body', 'status', 'content_type', 'headers', '_cookies'
-                 'handler')
 
     def __init__(self, handler,  status=200, headers=None,
                  content_type='text/plain', ):
         super().__init__(status=status, headers=headers,
                          content_type=content_type)
+        self.headers['Transfer-Encoding'] = 'chunked'
+        self.headers.pop('Content-Length', None)
         self.handler = handler
 
 
