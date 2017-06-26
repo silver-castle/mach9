@@ -260,6 +260,9 @@ class HttpProtocol(asyncio.Protocol):
         transport.write(response)
         if not more_content and not keep_alive:
             transport.close()
+        elif not more_content and keep_alive:
+            self._last_request_time = self.get_current_time()
+            self.cleanup()
 
     def write_error(self, exception):
         try:
