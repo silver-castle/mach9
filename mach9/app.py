@@ -607,15 +607,21 @@ class Mach9:
                 response = handler(request, *args, **kwargs)
                 if isawaitable(response):
                     response = await response
+                # response stream
+                if isinstance(response, self.stream_http_response_class):
+                    _message = response.get_message(True)
+                    await channels['reply'].send(_message)
+                    await response.handler(
+                        ReplyChannelProxy(channels['reply']))
+                    channels['reply'].send({
+                        'content': b'',
+                        'more_content': False
+                    })
+                    return
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
-            if isinstance(response, self.stream_http_response_class):
-                while True:
-                    _message = await response.get_message()
-                    await channels['reply'].send(_message)
-            else:
-                _message = response.get_message(False)
+            _message = response.get_message(False)
         except Exception as e:
             # -------------------------------------------- #
             # Response Generation Failed
@@ -648,3 +654,16 @@ class Mach9:
                 )
 
         await channels['reply'].send(_message)
+
+
+class ReplyChannelProxy:
+
+    def __init__(self, reply_channel):
+        self._reply_channel
+
+    async def send(self, content):
+        message = {
+            'content': content,
+            'more_content': True
+        }
+        self._reply_channel.send(message)

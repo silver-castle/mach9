@@ -262,24 +262,22 @@ class HTTPResponse:
             'more_content': more_content
         }
 
-    def get_response_chunk(self, content, more_content):
-        '''
-        http://channels.readthedocs.io/en/stable/asgi/www.html#response-chunk
-        '''
-        return {
-            'content': content,
-            'more_content': more_content
-        }
-
 
 class StreamHTTPResponse(HTTPResponse):
-    pass
+    __slots__ = ('body', 'status', 'content_type', 'headers', '_cookies'
+                 'handler')
+
+    def __init__(self, handler,  status=200, headers=None,
+                 content_type='text/plain', ):
+        super().__init__(status=status, headers=headers,
+                         content_type=content_type)
+        self.handler = handler
 
 
-def stream(body, status=200, headers=None,
+def stream(handler, status=200, headers=None,
            content_type='text/plain; charset=utf-8'):
     return StreamHTTPResponse(
-        body, status=status, headers=headers,
+        handler, status=status, headers=headers,
         content_type=content_type)
 
 
