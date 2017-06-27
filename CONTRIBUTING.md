@@ -5,9 +5,7 @@ So the pull request approval rules are pretty simple:
 2. All pull requests must have explicit value for maintainers.
 3. All pull requests must pass flake8 checks.
 4. All pull requests must be consistent with the existing code.
-5. If you decide to remove/change anything from any common interface
-a deprecation message should accompany it.
-6. If you implement a new feature you should have at least one unit
+5. If you implement a new feature you should have at least one unit
 test to accompany it.
 
 ## Warning
