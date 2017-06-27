@@ -4,7 +4,8 @@ from setuptools import setup
 setup_kwargs = {
     'name': 'mach9',
     'author': '38elements',
-    'version': '0.0.2',
+    'version': '0.0.3',
+    'url': 'https://github.com/silver-castle/mach9',
     'license': 'MIT License',
     'packages': ['mach9'],
     'classifiers': [
