@@ -20,9 +20,6 @@ class BodyChannel(asyncio.Queue):
     def receive(self):
         return self.get()
 
-    def close(self):
-        self.transport.close()
-
 
 class ReplyChannel:
 
@@ -86,6 +83,7 @@ class HttpProtocol(asyncio.Protocol):
         self._last_request_time = None
         self._request_handler_task = None
         self._request_stream_task = None
+        # config.KEEP_ALIVE or not check_headers()['connection_close']
         self._keep_alive = keep_alive
         self._request_timeout = _request_timeout or RequestTimeout
         self._payload_too_large = _payload_too_large or PayloadTooLarge
@@ -221,6 +219,19 @@ class HttpProtocol(asyncio.Protocol):
             'server': self.transport.get_extra_info('socketname')
         }
 
+    def check_headers(self, headers):
+        connection_close = False
+        content_length = False
+        for key, value in headers:
+            if key == b'Connection' and value == b'close':
+                connection_close = True
+            if key == b'Content-Length':
+                content_length = True
+        return {
+            'connection_close': connection_close,
+            'content_length': content_length
+        }
+
     def after_write(self, more_content, keep_alive):
         if not more_content and not keep_alive:
             self.transport.close()
@@ -234,6 +245,10 @@ class HttpProtocol(asyncio.Protocol):
         headers = message.get('headers')
         content = message.get('content')
         more_content = message.get('more_content', False)
+        if headers is not None:
+            result_headers = self.check_headers(headers)
+            if result_headers['connection_close'] is True:
+                self._keep_alive = False
         keep_alive = self.keep_alive
 
         if not status:
@@ -249,13 +264,12 @@ class HttpProtocol(asyncio.Protocol):
         header_content = b''
         if headers is not None:
             _header_content = []
-            if not more_content:
-                cl = any(map(lambda h: h[0] == b'Content-Length', headers))
-                if not cl:
-                    _header_content.extend([
-                        b'Content-Length: ',
-                        str(len(content)).encode(), b'\r\n'])
+            if not more_content and not result_headers['content_length']:
+                _header_content.extend([b'Content-Length: ',
+                                        str(len(content)).encode(), b'\r\n'])
             for key, value in headers:
+                if key == b'Connection':
+                    continue
                 _header_content.extend([key, b': ', value, b'\r\n'])
             header_content = b''.join(_header_content)
 
