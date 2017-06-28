@@ -7,11 +7,11 @@ from mimetypes import guess_type
 from urllib.parse import unquote
 
 from mach9 import Mach9
-from mach9.response import HTTPResponse, file
+from mach9.response import HTTPResponse, file, text
 
 
 def test_response_body_not_a_string():
-    """Test when a response body sent from the application is not a string"""
+    '''Test when a response body sent from the application is not a string'''
     app = Mach9('response_body_not_a_string')
     random_num = choice(range(1000))
 
@@ -25,7 +25,7 @@ def test_response_body_not_a_string():
 
 @pytest.fixture
 def static_file_directory():
-    """The static directory to serve"""
+    '''The static directory to serve'''
     current_file = inspect.getfile(inspect.currentframe())
     current_directory = os.path.dirname(os.path.abspath(current_file))
     static_directory = os.path.join(current_directory, 'static')
@@ -33,7 +33,7 @@ def static_file_directory():
 
 
 def get_file_content(static_file_directory, file_name):
-    """The content of the static file to check"""
+    '''The content of the static file to check'''
     with open(os.path.join(static_file_directory, file_name), 'rb') as file:
         return file.read()
 
@@ -82,3 +82,15 @@ def test_file_head_response(file_name, static_file_directory):
     assert int(response.headers[
                'Content-Length']) == len(
                    get_file_content(static_file_directory, file_name))
+
+
+def test_connection_close():
+    app = Mach9('test_connection_close')
+
+    @app.get('/get')
+    async def get(request):
+        return text('GET', headers={'Connection': 'close'})
+    request, response = app.test_client.get('/get')
+    assert response.status == 200
+    assert response.headers['Connection'] == 'close'
+    assert response.text == 'GET'
