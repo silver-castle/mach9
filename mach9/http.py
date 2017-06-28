@@ -221,8 +221,8 @@ class HttpProtocol(asyncio.Protocol):
             'server': self.transport.get_extra_info('socketname')
         }
 
-    def after_write(self, more_content, keep_alive, status):
-        if not more_content and (not keep_alive or not status):
+    def after_write(self, more_content, keep_alive):
+        if not more_content and not keep_alive:
             self.transport.close()
         elif not more_content and keep_alive:
             self._last_request_time = self.get_current_time()
@@ -238,7 +238,7 @@ class HttpProtocol(asyncio.Protocol):
 
         if not status:
             transport.write(content)
-            self.after_write(more_content, keep_alive, status)
+            self.after_write(more_content, keep_alive)
             return
 
         keep_alive_timeout = self.request_timeout
@@ -273,7 +273,7 @@ class HttpProtocol(asyncio.Protocol):
                 content
             )
         transport.write(response)
-        self.after_write(more_content, keep_alive, status)
+        self.after_write(more_content, keep_alive)
 
     def write_error(self, exception):
         try:
