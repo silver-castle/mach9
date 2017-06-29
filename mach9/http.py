@@ -239,6 +239,9 @@ class HttpProtocol(asyncio.Protocol):
             self._last_request_time = self.get_current_time()
             self.cleanup()
 
+    def is_response_chunk(self, message):
+        return 'status' not in message and 'headers' not in message
+
     def send(self, message):
         transport = self.transport
         status = message.get('status')
