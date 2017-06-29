@@ -242,6 +242,21 @@ class HttpProtocol(asyncio.Protocol):
     def is_response_chunk(self, message):
         return 'status' not in message and 'headers' not in message
 
+    def make_header_content(self, headers, result_headers,
+                            content, more_content):
+        header_content = b''
+        if headers is not None:
+            _header_content = []
+            if not more_content and not result_headers['content_length']:
+                _header_content.extend([b'Content-Length: ',
+                                        str(len(content)).encode(), b'\r\n'])
+            for key, value in headers:
+                if key == b'Connection':
+                    continue
+                _header_content.extend([key, b': ', value, b'\r\n'])
+            header_content = b''.join(_header_content)
+        return header_content
+
     def send(self, message):
         transport = self.transport
         status = message.get('status')
@@ -264,17 +279,8 @@ class HttpProtocol(asyncio.Protocol):
         if keep_alive and keep_alive_timeout is not None:
             timeout_header = b'Keep-Alive: %d\r\n' % keep_alive_timeout
 
-        header_content = b''
-        if headers is not None:
-            _header_content = []
-            if not more_content and not result_headers['content_length']:
-                _header_content.extend([b'Content-Length: ',
-                                        str(len(content)).encode(), b'\r\n'])
-            for key, value in headers:
-                if key == b'Connection':
-                    continue
-                _header_content.extend([key, b': ', value, b'\r\n'])
-            header_content = b''.join(_header_content)
+        header_content = self.make_header_content(headers, result_headers,
+                                                  content, more_content)
 
         response = (
             b'HTTP/1.1 %d %b\r\n'
