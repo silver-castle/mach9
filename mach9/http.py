@@ -269,7 +269,7 @@ class HttpProtocol(asyncio.Protocol):
                 self._keep_alive = False
         keep_alive = self.keep_alive
 
-        if not status:
+        if self.is_response_chunk(message):
             transport.write(content)
             self.after_write(more_content, keep_alive)
             return
