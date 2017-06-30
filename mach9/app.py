@@ -614,7 +614,7 @@ class Mach9:
                 await response.handler(
                     ReplyChannelProxy(channels['reply']))
                 await channels['reply'].send({
-                    'content': b'0\r\n\r\n',
+                    'content': b'',
                     'more_content': False
                 })
                 return
@@ -660,7 +660,7 @@ class ReplyChannelProxy:
 
     async def send(self, content):
         message = {
-            'content': b"%x\r\n%b\r\n" % (len(content), content),
+            'content': content,
             'more_content': True
         }
         await self._reply_channel.send(message)
