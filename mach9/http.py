@@ -270,8 +270,13 @@ class HttpProtocol(asyncio.Protocol):
         keep_alive = self.keep_alive
 
         if self.is_response_chunk(message):
-            transport.write(content)
-            self.after_write(more_content, keep_alive)
+            content_length = len(content)
+            if more_content and content_length > 0:
+                transport.write(b'%x\r\n%b\r\n' % (content_length, content))
+                self.after_write(more_content, keep_alive)
+            elif more_content is False:
+                transport.write(b'0\r\n\r\n')
+                self.after_write(more_content, keep_alive)
             return
 
         keep_alive_timeout = self.request_timeout

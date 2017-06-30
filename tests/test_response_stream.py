@@ -20,6 +20,14 @@ def test_response_stream():
                 await channel.send(body_chunk['content'])
         return stream(streaming)
 
-    request, response = app.test_client.post('/post/1', data=data)
+    @app.get('/get')
+    async def get(request):
+        async def streaming(channel):
+            await channel.send(b'foo')
+            await channel.send(b'')
+            await channel.send(b'bar')
+        return stream(streaming)
+
+    request, response = app.test_client.get('/get')
     assert response.status == 200
-    assert response.text == data
+    assert response.text == 'foobar'
