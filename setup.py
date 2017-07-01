@@ -4,6 +4,8 @@ from setuptools import setup
 setup_kwargs = {
     'name': 'mach9',
     'author': '38elements',
+    'url': 'https://github.com/silver-castle/mach9',
+    'description': 'a web application framework based ASGI and async/await.',
     'version': '0.0.3',
     'license': 'MIT License',
     'packages': ['mach9'],
