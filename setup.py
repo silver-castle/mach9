@@ -4,7 +4,7 @@ from setuptools import setup
 setup_kwargs = {
     'name': 'mach9',
     'author': '38elements',
-    'version': '0.0.2',
+    'version': '0.0.3',
     'license': 'MIT License',
     'packages': ['mach9'],
     'classifiers': [
