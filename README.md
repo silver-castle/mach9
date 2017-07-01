@@ -56,7 +56,7 @@ pip install mach9
 from mach9 import Mach9
 from mach9.response import text
 
-app = Mach9(log_config=None)
+app = Mach9()
 
 
 @app.route('/')
@@ -64,7 +64,7 @@ async def test(request):
     return text('Hello world!')
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=8000, debug=False)
+    app.run(host='127.0.0.1', port=8000)
 ```
 
 ## Document
