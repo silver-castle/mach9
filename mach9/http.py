@@ -42,7 +42,7 @@ class HttpProtocol(asyncio.Protocol):
         'parser', 'url', 'headers',
         # request config
         'request_handler', 'request_timeout', 'request_max_size',
-        'request_class', 'body_channel_class', 'reply_channel_class',
+        'request_class',
         # enable or disable access log / error log purpose
         'has_log', 'log', 'netlog',
         # connection management
@@ -55,8 +55,7 @@ class HttpProtocol(asyncio.Protocol):
                  keep_alive=True, request_class=None,
                  netlog=None, get_current_time=None, _request_timeout=None,
                  _payload_too_large=None, _invalid_usage=None,
-                 _server_error=None, body_channel_class=None,
-                 reply_channel_class=None):
+                 _server_error=None):
         '''signal is shared'''
         self.loop = loop
         self.transport = None
@@ -72,8 +71,6 @@ class HttpProtocol(asyncio.Protocol):
         self.connections = connections
         self.request_handler = request_handler
         self.request_class = request_class
-        self.body_channel_class = body_channel_class
-        self.reply_channel_class = reply_channel_class
         self.error_handler = error_handler
         self.request_timeout = request_timeout
         self.request_max_size = request_max_size
@@ -164,8 +161,8 @@ class HttpProtocol(asyncio.Protocol):
     def on_headers_complete(self):
         channels = {}
         self.message = self.get_message(self.url)
-        channels['body'] = self.body_channel_class(self.transport)
-        channels['reply'] = self.reply_channel_class(self)
+        channels['body'] = BodyChannel(self.transport)
+        channels['reply'] = ReplyChannel(self)
         self.body_channel = channels['body']
         self._request_handler_task = self.loop.create_task(
             self.request_handler(self.message, channels))

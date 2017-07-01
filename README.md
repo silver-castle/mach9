@@ -23,7 +23,6 @@ Mach9 has following components.
 * Config
 * Request
 * Response
-* Channel
 * Protocol
 * Router
 * Server

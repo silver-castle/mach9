@@ -35,8 +35,7 @@ def serve(host, port, request_handler, error_handler, before_start=None,
           register_sys_signals=True, run_async=False, connections=None,
           signal=None, has_log=True, keep_alive=True,
           log=None, netlog=None, request_class=None,
-          update_current_time=None, get_current_time=None,
-          body_channel_class=None, reply_channel_class=None):
+          update_current_time=None, get_current_time=None):
     """Start asynchronous HTTP Server on an individual process.
 
     :param host: Address to host on
@@ -67,8 +66,6 @@ def serve(host, port, request_handler, error_handler, before_start=None,
     :param update_current_time:
     :param get_current_time:
     :param request_class:
-    :param body_channel_class:
-    :param reply_channel_class:
     :return: Nothing
     """
     if not run_async:
@@ -95,8 +92,6 @@ def serve(host, port, request_handler, error_handler, before_start=None,
         keep_alive=keep_alive,
         log=log,
         request_class=request_class,
-        body_channel_class=body_channel_class,
-        reply_channel_class=reply_channel_class,
         netlog=netlog
     )
 
