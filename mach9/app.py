@@ -19,7 +19,7 @@ from mach9.router import Router
 from mach9.signal import Signal
 from mach9.server import serve as _serve
 from mach9.server import serve_multiple as _serve_multiple
-from mach9.http import HttpProtocol, BodyChannel, ReplyChannel
+from mach9.http import HttpProtocol
 from mach9.request import Request
 from mach9.static import register as static_register
 from mach9.testing import Mach9TestClient
@@ -35,7 +35,6 @@ class Mach9:
                  serve=None, serve_multiple=None, log=None, netlog=None,
                  log_config=LOGGING, update_current_time=None,
                  get_current_time=None, composition_view=None,
-                 body_channel_class=None, reply_channel_class=None,
                  stream_http_response_class=None):
 
         self.log = log or _log
@@ -72,8 +71,6 @@ class Mach9:
         self.blueprints = {}
         self._blueprint_order = []
         self.protocol = protocol or HttpProtocol
-        self.body_channel_class = body_channel_class or BodyChannel
-        self.reply_channel_class = reply_channel_class or ReplyChannel
         self.stream_http_response_class = (
             stream_http_response_class or StreamHTTPResponse)
         self.debug = None
@@ -518,8 +515,6 @@ class Mach9:
             'loop': loop,
             'register_sys_signals': register_sys_signals,
             'request_class': self.request_class,
-            'body_channel_class': self.body_channel_class,
-            'reply_channel_class': self.reply_channel_class,
             'backlog': backlog,
             'has_log': has_log
         }
