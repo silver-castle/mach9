@@ -20,6 +20,7 @@ setup_kwargs = {
         'uvloop',
         'ujson',
         'aiofiles',
+        'websockets',
     ]
 }
 
