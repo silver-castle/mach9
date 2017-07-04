@@ -1,9 +1,8 @@
-import asyncio
 import inspect
 
 from mach9 import Mach9
 from mach9.blueprints import Blueprint
-from mach9.response import json, text
+from mach9.response import text
 from mach9.exceptions import NotFound, ServerError, InvalidUsage
 
 
@@ -21,20 +20,20 @@ def test_bp():
 
     app.blueprint(bp)
     request, response = app.test_client.get('/')
-    assert app.is_request_stream is False
 
     assert response.text == 'Hello'
+
 
 def test_bp_strict_slash():
     app = Mach9('test_route_strict_slash')
     bp = Blueprint('test_text')
 
     @bp.get('/get', strict_slashes=True)
-    def handler(request):
+    def handler1(request):
         return text('OK')
 
     @bp.post('/post/', strict_slashes=True)
-    def handler(request):
+    def handler2(request):
         return text('OK')
 
     app.blueprint(bp)
@@ -87,6 +86,7 @@ def test_several_bp_with_url_prefix():
     request, response = app.test_client.get('/test2/')
     assert response.text == 'Hello2'
 
+
 def test_bp_with_host():
     app = Mach9('test_bp_host')
     bp = Blueprint('test_bp_host', url_prefix='/test1', host="example.com")
@@ -96,7 +96,7 @@ def test_bp_with_host():
         return text('Hello')
 
     @bp.route('/', host="sub.example.com")
-    def handler(request):
+    def handler3(request):
         return text('Hello subdomain!')
 
     app.blueprint(bp)
@@ -128,13 +128,12 @@ def test_several_bp_with_host():
         return text('Hello')
 
     @bp2.route('/')
-    def handler2(request):
+    def handler5(request):
         return text('Hello2')
 
     @bp2.route('/other/')
-    def handler2(request):
+    def handler6(request):
         return text('Hello3')
-
 
     app.blueprint(bp)
     app.blueprint(bp2)
@@ -158,6 +157,7 @@ def test_several_bp_with_host():
         headers=headers)
     assert response.text == 'Hello3'
 
+
 def test_bp_middleware():
     app = Mach9('test_middleware')
     blueprint = Blueprint('test_middleware')
@@ -176,6 +176,7 @@ def test_bp_middleware():
 
     assert response.status == 200
     assert response.text == 'OK'
+
 
 def test_bp_exception_handler():
     app = Mach9('test_middleware')
@@ -202,13 +203,13 @@ def test_bp_exception_handler():
     request, response = app.test_client.get('/1')
     assert response.status == 400
 
-
     request, response = app.test_client.get('/2')
     assert response.status == 200
     assert response.text == 'OK'
 
     request, response = app.test_client.get('/3')
     assert response.status == 200
+
 
 def test_bp_listeners():
     app = Mach9('test_middleware')
@@ -244,7 +245,8 @@ def test_bp_listeners():
 
     request, response = app.test_client.get('/')
 
-    assert order == [1,2,3,4,5,6]
+    assert order == [1, 2, 3, 4, 5, 6]
+
 
 def test_bp_static():
     current_file = inspect.getfile(inspect.currentframe())
@@ -262,48 +264,47 @@ def test_bp_static():
     assert response.status == 200
     assert response.body == current_file_contents
 
+
 def test_bp_shorthand():
     app = Mach9('test_shorhand_routes')
     blueprint = Blueprint('test_shorhand_routes')
 
     @blueprint.get('/get')
-    def handler(request):
+    def handler8(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.put('/put')
-    def handler(request):
+    def handler9(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.post('/post')
-    def handler(request):
+    def handler10(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.head('/head')
-    def handler(request):
+    def handler11(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.options('/options')
-    def handler(request):
+    def handler12(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.patch('/patch')
-    def handler(request):
+    def handler13(request):
         assert request.stream is None
         return text('OK')
 
     @blueprint.delete('/delete')
-    def handler(request):
+    def handler14(request):
         assert request.stream is None
         return text('OK')
 
     app.blueprint(blueprint)
-
-    assert app.is_request_stream is False
 
     request, response = app.test_client.get('/get')
     assert response.text == 'OK'

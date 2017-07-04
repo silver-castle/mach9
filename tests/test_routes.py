@@ -35,8 +35,6 @@ def test_route_strict_slash():
         assert request.stream is None
         return text('OK')
 
-    assert app.is_request_stream is False
-
     request, response = app.test_client.get('/get')
     assert response.text == 'OK'
 
@@ -83,8 +81,6 @@ def test_shorthand_routes_put():
         assert request.stream is None
         return text('OK')
 
-    assert app.is_request_stream is False
-
     request, response = app.test_client.put('/put')
     assert response.text == 'OK'
 
@@ -98,8 +94,6 @@ def test_shorthand_routes_delete():
     def handler(request):
         assert request.stream is None
         return text('OK')
-
-    assert app.is_request_stream is False
 
     request, response = app.test_client.delete('/delete')
     assert response.text == 'OK'
@@ -115,8 +109,6 @@ def test_shorthand_routes_patch():
         assert request.stream is None
         return text('OK')
 
-    assert app.is_request_stream is False
-
     request, response = app.test_client.patch('/patch')
     assert response.text == 'OK'
 
@@ -131,8 +123,6 @@ def test_shorthand_routes_head():
         assert request.stream is None
         return text('OK')
 
-    assert app.is_request_stream is False
-
     request, response = app.test_client.head('/head')
     assert response.status == 200
 
@@ -146,8 +136,6 @@ def test_shorthand_routes_options():
     def handler(request):
         assert request.stream is None
         return text('OK')
-
-    assert app.is_request_stream is False
 
     request, response = app.test_client.options('/options')
     assert response.status == 200

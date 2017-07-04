@@ -10,8 +10,6 @@ data = 'abc' * 100000
 
 
 def test_request_stream_method_view():
-    '''for self.is_request_stream = True'''
-
     app = Mach9('test_request_stream_method_view')
 
     class SimpleView(HTTPMethodView):
@@ -33,8 +31,6 @@ def test_request_stream_method_view():
 
     app.add_route(SimpleView.as_view(), '/method_view')
 
-    assert app.is_request_stream is True
-
     request, response = app.test_client.get('/method_view')
     assert response.status == 200
     assert response.text == 'OK'
@@ -45,7 +41,6 @@ def test_request_stream_method_view():
 
 
 def test_request_stream_app():
-    '''for self.is_request_stream = True and decorators'''
 
     app = Mach9('test_request_stream_app')
 
@@ -117,8 +112,6 @@ def test_request_stream_app():
             result += body_chunk['content'].decode('utf-8')
         return text(result)
 
-    assert app.is_request_stream is True
-
     request, response = app.test_client.post('/not_found')
     assert response.status == 404
 
@@ -164,7 +157,6 @@ def test_request_stream_app():
 
 
 def test_request_stream_blueprint():
-    '''for self.is_request_stream = True'''
 
     app = Mach9('test_request_stream_blueprint')
     bp = Blueprint('test_blueprint_request_stream_blueprint')
@@ -239,8 +231,6 @@ def test_request_stream_blueprint():
 
     app.blueprint(bp)
 
-    assert app.is_request_stream is True
-
     request, response = app.test_client.get('/get')
     assert response.status == 200
     assert response.text == 'GET'
@@ -283,7 +273,6 @@ def test_request_stream_blueprint():
 
 
 def test_request_stream_composition_view():
-    '''for self.is_request_stream = True'''
 
     app = Mach9('test_request_stream__composition_view')
 
@@ -305,8 +294,6 @@ def test_request_stream_composition_view():
     view.add(['GET'], get_handler)
     view.add(['POST'], post_handler, stream=True)
     app.add_route(view, '/composition_view')
-
-    assert app.is_request_stream is True
 
     request, response = app.test_client.get('/composition_view')
     assert response.status == 200
@@ -395,8 +382,6 @@ def test_request_stream():
     app.blueprint(bp)
 
     app.add_route(view, '/composition_view')
-
-    assert app.is_request_stream is True
 
     request, response = app.test_client.get('/method_view')
     assert response.status == 200
