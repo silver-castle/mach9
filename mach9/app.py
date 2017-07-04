@@ -77,7 +77,6 @@ class Mach9:
         self.sock = None
         self.listeners = defaultdict(list)
         self.is_running = False
-        self.is_request_stream = False
         self.serve = serve or _serve
         self.serve_multiple = serve_multiple or _serve_multiple
         self.netlog = netlog or _netlog
@@ -143,9 +142,6 @@ class Mach9:
         # and will probably get confused as to why it's not working
         if not uri.startswith('/'):
             uri = '/' + uri
-
-        if stream:
-            self.is_request_stream = True
 
         def response(handler):
             if stream:

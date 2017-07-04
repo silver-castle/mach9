@@ -39,7 +39,6 @@ def test_methods(method):
             return text('', headers={'method': 'DELETE'})
 
     app.add_route(DummyView.as_view(), '/')
-    assert app.is_request_stream is False
 
     request, response = getattr(app.test_client, method.lower())('/')
     assert response.headers['method'] == method
@@ -90,7 +89,6 @@ def test_with_bp():
     app.blueprint(bp)
     request, response = app.test_client.get('/')
 
-    assert app.is_request_stream is False
     assert response.text == 'I am get method'
 
 
@@ -241,7 +239,6 @@ def test_composition_view_runs_methods_as_expected(method):
     view.add(['DELETE', 'PATCH'], lambda x: text('second method'))
 
     app.add_route(view, '/')
-    assert app.is_request_stream is False
 
     if method in ['GET', 'POST', 'PUT']:
         request, response = getattr(app.test_client, method.lower())('/')
