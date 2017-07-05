@@ -170,7 +170,7 @@ class HttpProtocol(asyncio.Protocol):
     def on_body(self, body):
         body_chunk = self.get_request_body_chunk(body, False, True)
         self._request_stream_task = self.loop.create_task(
-            self.body_channel.put(body_chunk))
+            self.body_channel.send(body_chunk))
 
     def on_message_complete(self):
         body_chunk = self.get_request_body_chunk(b'', False, False)
