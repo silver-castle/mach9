@@ -339,10 +339,7 @@ class Router:
         :param request: Request object
         :return: bool
         """
-        try:
-            handler = self.get(request)[0]
-        except self._not_found:
-            return False
+        handler = self.get(request)[0]
         if (hasattr(handler, 'view_class') and
                 hasattr(handler.view_class, request.method.lower())):
             handler = getattr(handler.view_class, request.method.lower())
