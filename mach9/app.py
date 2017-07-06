@@ -584,7 +584,7 @@ class Mach9:
                         ('None was returned while requesting a '
                          'handler from the router'))
 
-                # It is not request stream
+                # It is request stream
                 if self.router.is_stream_handler(request):
                     request.stream = channels['body']
                 else:
