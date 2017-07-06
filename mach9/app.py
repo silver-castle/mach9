@@ -595,10 +595,10 @@ class Mach9:
                 response = handler(request, *args, **kwargs)
                 if isawaitable(response):
                     response = await response
-                # response stream
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
+            # response stream
             if isinstance(response, self.stream_http_response_class):
                 _message = response.get_message(True)
                 await channels['reply'].send(_message)
