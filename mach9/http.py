@@ -202,6 +202,7 @@ class HttpProtocol(asyncio.Protocol):
         path = '' if url_obj.path is None else url_obj.path.decode('utf-8')
         query = b'' if url_obj.query is None else url_obj.query
         return {
+            'channel': 'http.request',
             'reply_channel': None,
             'http_version': self.parser.get_http_version(),
             'method': self.parser.get_method().decode(),
