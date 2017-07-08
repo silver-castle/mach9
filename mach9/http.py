@@ -1,11 +1,13 @@
 import asyncio
 import traceback
+from httptools import HttpParserUpgrade
 from httptools import HttpRequestParser, parse_url
 from httptools.parser.errors import HttpParserError
 
 from mach9.exceptions import (
     RequestTimeout, PayloadTooLarge, InvalidUsage, ServerError)
 from mach9.response import ALL_STATUS_CODES
+from mach9.websocket import upgrade_to_websocket
 
 
 class BodyChannel(asyncio.Queue):
@@ -46,6 +48,7 @@ class HttpProtocol(asyncio.Protocol):
         # enable or disable access log / error log purpose
         'has_log', 'log', 'netlog',
         # connection management
+        '_is_upgrade',
         '_total_request_size', '_timeout_handler', '_last_request_time',
         'get_current_time', 'body_channel', 'message')
 
@@ -80,6 +83,7 @@ class HttpProtocol(asyncio.Protocol):
         self._last_request_time = None
         self._request_handler_task = None
         self._request_stream_task = None
+        self._is_upgrade = False
         # config.KEEP_ALIVE or not check_headers()['connection_close']
         self._keep_alive = keep_alive
         self._request_timeout = _request_timeout or RequestTimeout
@@ -144,6 +148,8 @@ class HttpProtocol(asyncio.Protocol):
         # Parse request chunk or close connection
         try:
             self.parser.feed_data(data)
+        except HttpParserUpgrade:
+            upgrade_to_websocket(self)
         except HttpParserError:
             exception = self._invalid_usage('Bad Request')
             self.write_error(exception)
@@ -152,13 +158,17 @@ class HttpProtocol(asyncio.Protocol):
         self.url = url
 
     def on_header(self, name, value):
-        if name == b'Content-Length' and int(value) > self.request_max_size:
+        name = name.lower()
+        if name == b'content-length' and int(value) > self.request_max_size:
             exception = self._payload_too_large('Payload Too Large')
             self.write_error(exception)
-
+        if name == b'upgrade':
+            self._is_upgrade = True
         self.headers.append([name, value])
 
     def on_headers_complete(self):
+        if self._is_upgrade:
+            return
         channels = {}
         self.message = self.get_message(self.url)
         channels['body'] = BodyChannel(self.transport)
@@ -168,11 +178,15 @@ class HttpProtocol(asyncio.Protocol):
             self.request_handler(self.message, channels))
 
     def on_body(self, body):
+        if self._is_upgrade:
+            return
         body_chunk = self.get_request_body_chunk(body, False, True)
         self._request_stream_task = self.loop.create_task(
             self.body_channel.send(body_chunk))
 
     def on_message_complete(self):
+        if self._is_upgrade:
+            return
         body_chunk = self.get_request_body_chunk(b'', False, False)
         self._request_stream_task = self.loop.create_task(
             self.body_channel.send(body_chunk))

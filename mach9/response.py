@@ -264,13 +264,29 @@ class HTTPResponse:
 
 class StreamHTTPResponse(HTTPResponse):
 
-    def __init__(self, handler,  status=200, headers=None,
+    def __init__(self, handler, status=200, headers=None,
                  content_type='text/plain', ):
         super().__init__(status=status, headers=headers,
                          content_type=content_type)
         self.headers['Transfer-Encoding'] = 'chunked'
         self.headers.pop('Content-Length', None)
         self.handler = handler
+
+
+class WebsocketResponse:
+
+    def __init__(self, handler, accept=True):
+        self.handler = handler
+        self._accept = accept
+
+    def get_message(self):
+        return {
+            'accept': self._accept
+        }
+
+
+def websocket(handler, accept=True):
+    return WebsocketResponse(handler, accept)
 
 
 def stream(handler, status=200, headers=None,

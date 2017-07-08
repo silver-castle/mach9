@@ -1,7 +1,7 @@
 import logging
 import logging.config
 import re
-from asyncio import get_event_loop
+from asyncio import get_event_loop, Queue
 from collections import deque, defaultdict
 from functools import partial
 from inspect import isawaitable, stack, getmodulename
@@ -14,7 +14,7 @@ from mach9.exceptions import ServerError, URLBuildError, Mach9Exception
 from mach9.handlers import ErrorHandler
 from mach9.log import log as _log
 from mach9.log import log as _netlog
-from mach9.response import HTTPResponse, StreamHTTPResponse
+from mach9.response import HTTPResponse, StreamHTTPResponse, WebsocketResponse
 from mach9.router import Router
 from mach9.signal import Signal
 from mach9.server import serve as _serve
@@ -35,7 +35,8 @@ class Mach9:
                  serve=None, serve_multiple=None, log=None, netlog=None,
                  log_config=LOGGING, update_current_time=None,
                  get_current_time=None, composition_view=None,
-                 stream_http_response_class=None):
+                 stream_http_response_class=None,
+                 websocket_response_class=None):
 
         self.log = log or _log
 
@@ -60,6 +61,7 @@ class Mach9:
         _composition_view = composition_view or CompositionView
 
         self.name = name
+        self.websocket_channels = {}
         self.composition_view_class = _composition_view
         self.router = router or Router(_composition_view)
         self.request_class = request_class or Request
@@ -73,6 +75,8 @@ class Mach9:
         self.protocol = protocol or HttpProtocol
         self.stream_http_response_class = (
             stream_http_response_class or StreamHTTPResponse)
+        self.websocket_response_class = (
+            websocket_response_class or WebsocketResponse)
         self.debug = None
         self.sock = None
         self.listeners = defaultdict(list)
@@ -127,7 +131,7 @@ class Mach9:
 
     # Decorator
     def route(self, uri, methods=frozenset({'GET'}), host=None,
-              strict_slashes=False, stream=False):
+              strict_slashes=False, stream=False, websocket=False):
         '''Decorate a function to be registered as a route
 
         :param uri: path of the URL
@@ -144,8 +148,10 @@ class Mach9:
             uri = '/' + uri
 
         def response(handler):
-            if stream:
-                handler.is_stream = stream
+            if websocket:
+                handler.is_websocket = True
+            elif stream:
+                handler.is_stream = True
             self.router.add(uri=uri, methods=methods, handler=handler,
                             host=host, strict_slashes=strict_slashes)
             return handler
@@ -153,9 +159,9 @@ class Mach9:
         return response
 
     # Shorthand method decorators
-    def get(self, uri, host=None, strict_slashes=False):
+    def get(self, uri, host=None, strict_slashes=False, websocket=False):
         return self.route(uri, methods=frozenset({'GET'}), host=host,
-                          strict_slashes=strict_slashes)
+                          strict_slashes=strict_slashes, websocket=websocket)
 
     def post(self, uri, host=None, strict_slashes=False, stream=False):
         return self.route(uri, methods=frozenset({'POST'}), host=host,
@@ -561,8 +567,21 @@ class Mach9:
     # -------------------------------------------------------------------- #
     async def __call__(self, message, channels):
         try:
-            # make request
-            request = self.request_class(message)
+            request = None
+            channel_name = message.get('channel')
+            if (channel_name == 'http.request'
+                    or channel_name == 'websocket.connect'):
+                # make request
+                request = self.request_class(message)
+            elif channel_name == 'websocket.receive':
+                reply_channel_name = channels['reply'].name
+                await self.websocket_channels[reply_channel_name].put(message)
+                return
+            elif channel_name == 'websocket.disconnect':
+                reply_channel_name = channels['reply'].name
+                await self.websocket_channels[reply_channel_name].put(message)
+                self.websocket_channels.pop(reply_channel_name, None)
+                return
 
             # -------------------------------------------- #
             # Request Middleware
@@ -585,8 +604,12 @@ class Mach9:
                          'handler from the router'))
 
                 # It is request stream
+                # FIXME more check
                 if self.router.is_stream_handler(request):
                     request.stream = channels['body']
+                # websocket
+                elif hasattr(handler, 'is_websocket'):
+                    request.stream = Queue()
                 else:
                     body = await self.get_body(message, channels)
                     message['body'] = body
@@ -598,6 +621,25 @@ class Mach9:
             if not hasattr(response, 'get_message'):
                 raise ServerError(
                     'response does not have get_message()')
+            # websocket
+            if isinstance(response, self.websocket_response_class):
+                channel_name = channels['reply'].name
+                if channel_name not in self.websocket_channels:
+                    self.websocket_channels[channel_name] = request.stream
+                else:
+                    raise ServerError(
+                        ('There is a channel_name of websocket.'))
+                _message = response.get_message()
+                await channels['reply'].send(_message)
+                await response.handler(
+                    WebSocketReplyChannelProxy(channels['reply'],
+                                               self.websocket_channels))
+                await channels['reply'].send({
+                    'bytes': None,
+                    'text': None,
+                    'close': True
+                })
+                return
             # response stream
             if isinstance(response, self.stream_http_response_class):
                 _message = response.get_message(True)
@@ -633,9 +675,15 @@ class Mach9:
             # Response Middleware
             # -------------------------------------------- #
             try:
+                # pass chunk
+                if 'scheme' not in message:
+                    return
                 response = await self._run_response_middleware(request,
                                                                response)
-                _message = response.get_message(False)
+                if (not isinstance(response, self.stream_http_response_class)
+                    and not isinstance(
+                        response, self.websocket_response_class)):
+                    _message = response.get_message(False)
             except:
                 self.log.exception(
                     'Exception occured in one of response middleware handlers'
@@ -653,5 +701,22 @@ class ReplyChannelProxy:
         message = {
             'content': content,
             'more_content': True
+        }
+        await self._reply_channel.send(message)
+
+
+class WebSocketReplyChannelProxy:
+
+    def __init__(self, reply_channel, websocket_channels):
+        self._reply_channel = reply_channel
+        self._websocket_channels = websocket_channels
+
+    async def send(self, content, close=False):
+        if close:
+            self._websocket_channels.pop(self._reply_channel.name, None)
+        message = {
+            'text': content if isinstance(content, str) else None,
+            'bytes': content if isinstance(content, bytes) else None,
+            'close': close
         }
         await self._reply_channel.send(message)
