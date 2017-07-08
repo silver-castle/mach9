@@ -98,6 +98,12 @@ class HttpProtocol(asyncio.Protocol):
                 and self.parser
                 and self.parser.should_keep_alive())
 
+    def cancel_task(self):
+        if self._request_stream_task:
+            self._request_stream_task.cancel()
+        if self._request_handler_task:
+            self._request_handler_task.cancel()
+
     # -------------------------------------------- #
     # Connection
     # -------------------------------------------- #
@@ -112,6 +118,7 @@ class HttpProtocol(asyncio.Protocol):
     def connection_lost(self, exc):
         self.connections.discard(self)
         self._timeout_handler.cancel()
+        self.cancel_task()
 
     def connection_timeout(self):
         # Check if
@@ -121,10 +128,7 @@ class HttpProtocol(asyncio.Protocol):
             self._timeout_handler = (
                 self.loop.call_later(time_left, self.connection_timeout))
         else:
-            if self._request_stream_task:
-                self._request_stream_task.cancel()
-            if self._request_handler_task:
-                self._request_handler_task.cancel()
+            self.cancel_task()
             exception = self._request_timeout('Request Timeout')
             self.write_error(exception)
 
