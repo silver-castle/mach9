@@ -1,6 +1,15 @@
 from mach9.http import HttpProtocol
 
 
+class Transport:
+
+    def get_extra_info(self, name):
+        if name == 'peername':
+            return ('127.0.0.1', 1234)
+        elif name == 'sockname':
+            return ('127.0.0.1', 5678)
+
+
 def test_check_headers():
     protocol = HttpProtocol(loop=None, request_handler=None,
                             error_handler=None)
@@ -101,3 +110,27 @@ def test_make_header_content():
     header_content = protocol.make_header_content(
         [[b'foo', b'bar']], result_headers, b'123', False)
     assert header_content == b'Content-Length: 3\r\nfoo: bar\r\n'
+
+
+def test_get_message():
+    http_protocol = HttpProtocol(loop=None, request_handler=None,
+                                 error_handler=None)
+    transport = Transport()
+    message = http_protocol.get_message(
+        transport,
+        '1.1',
+        b'GET',
+        b'http://127.0.0.1:1234/foo/bar?key1=1&key2=2',
+        [[b'k1', 'v1']])
+    assert message['channel'] == 'http.request'
+    assert message['reply_channel'] is None
+    assert message['http_version'] == '1.1'
+    assert message['method'] == 'GET'
+    assert message['scheme'] == 'http'
+    assert message['query_string'] == b'key1=1&key2=2'
+    assert message['root_path'] == ''
+    assert message['headers'] == [[b'k1', 'v1']]
+    assert message['body'] == b''
+    assert message['body_channel'] is None
+    assert message['client'] == ('127.0.0.1', 1234)
+    assert message['server'] == ('127.0.0.1', 5678)
