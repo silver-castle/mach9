@@ -136,7 +136,7 @@ class HttpProtocol(asyncio.Protocol):
     # Parsing
     # -------------------------------------------- #
 
-    def data_received(self, data):
+    def data_received(self, data: bytes):
         # Check for the request itself getting too large and exceeding
         # memory limits
         self._total_request_size += len(data)
@@ -158,10 +158,10 @@ class HttpProtocol(asyncio.Protocol):
             exception = self._invalid_usage('Bad Request')
             self.write_error(exception)
 
-    def on_url(self, url):
+    def on_url(self, url: bytes):
         self.url = url
 
-    def on_header(self, name, value):
+    def on_header(self, name: bytes, value: bytes):
         # for websocket
         name = name.lower()
         if name == b'content-length' and int(value) > self.request_max_size:
@@ -186,13 +186,15 @@ class HttpProtocol(asyncio.Protocol):
         if self._is_upgrade:
             return
         channels = {}
-        self.message = self.get_message(self.url)
+        self.message = self.get_message(
+            self.transport, self.parser.get_http_version(),
+            self.parser.get_method(), self.url, self.headers)
         channels['body'] = BodyChannel(self.transport)
         channels['reply'] = ReplyChannel(self)
         self.body_channel = channels['body']
         self.register_task(self.request_handler(self.message, channels))
 
-    def on_body(self, body):
+    def on_body(self, body: bytes):
         if self._is_upgrade:
             return
         body_chunk = self.get_request_body_chunk(body, False, True)
@@ -204,7 +206,8 @@ class HttpProtocol(asyncio.Protocol):
         body_chunk = self.get_request_body_chunk(b'', False, False)
         self.register_task(self.body_channel.send(body_chunk))
 
-    def get_request_body_chunk(self, content, closed, more_content):
+    def get_request_body_chunk(self, content: bytes, closed: bool,
+                               more_content: bool) -> dict:
         '''
         http://channels.readthedocs.io/en/stable/asgi/www.html#request-body-chunk
         '''
@@ -214,13 +217,14 @@ class HttpProtocol(asyncio.Protocol):
             'more_content': more_content
         }
 
-    def get_message(self, url):
+    def get_message(self, transport, http_version: str, method: bytes,
+                    url: bytes, headers: list) -> dict:
         '''
         http://channels.readthedocs.io/en/stable/asgi/www.html#request
         '''
         url_obj = parse_url(url)
         if url_obj.schema is None:
-            if self.transport.get_extra_info('sslcontext'):
+            if transport.get_extra_info('sslcontext'):
                 scheme = 'https'
             else:
                 scheme = 'http'
@@ -231,20 +235,20 @@ class HttpProtocol(asyncio.Protocol):
         return {
             'channel': 'http.request',
             'reply_channel': None,
-            'http_version': self.parser.get_http_version(),
-            'method': self.parser.get_method().decode(),
+            'http_version': http_version,
+            'method': method.decode(),
             'scheme': scheme,
             'path': path,
             'query_string': query,
             'root_path': '',
-            'headers': self.headers,
+            'headers': headers,
             'body': b'',
             'body_channel': None,
-            'client': self.transport.get_extra_info('peername'),
-            'server': self.transport.get_extra_info('socketname')
+            'client': transport.get_extra_info('peername'),
+            'server': transport.get_extra_info('sockname')
         }
 
-    def check_headers(self, headers):
+    def check_headers(self, headers: list) -> dict:
         connection_close = False
         content_length = False
         for key, value in headers:

@@ -79,7 +79,7 @@ class WebSocketProtocol(WebSocketCommonProtocol):
             'root_path': '',
             'headers': headers,
             'client': transport.get_extra_info('peername'),
-            'server': transport.get_extra_info('socketname'),
+            'server': transport.get_extra_info('sockname'),
             'order': self.order,
         }
 
