@@ -82,6 +82,7 @@ class HttpProtocol(asyncio.Protocol):
         self._total_request_size = 0
         self._timeout_handler = None
         self._last_request_time = None
+        # for task management
         self._tasks = []
         self._is_upgrade = False
         # config.KEEP_ALIVE or not check_headers()['connection_close']
@@ -101,6 +102,7 @@ class HttpProtocol(asyncio.Protocol):
     def cancel_tasks(self):
         for t in self._tasks:
             t.cancel()
+        self._tasks = []
 
     # -------------------------------------------- #
     # Connection
@@ -160,6 +162,7 @@ class HttpProtocol(asyncio.Protocol):
         self.url = url
 
     def on_header(self, name, value):
+        # for websocket
         name = name.lower()
         if name == b'content-length' and int(value) > self.request_max_size:
             exception = self._payload_too_large('Payload Too Large')
@@ -373,7 +376,6 @@ class HttpProtocol(asyncio.Protocol):
 
     def cleanup(self):
         self.cancel_tasks()
-        self._tasks = []
         self.parser = None
         self.url = None
         self.headers = None

@@ -38,6 +38,12 @@ class WebSocketProtocol(WebSocketCommonProtocol):
             'reply': ReplyChannel(self)
         }
 
+    def cleanup(self):
+        self.request_handler = None
+        self.transport = None
+        self.response_headers = None
+        self.channels = None
+
     def accept(self):
         content = b'HTTP/1.1 101 Switching Protocols\r\n'
         for key, value in self.response_headers:
@@ -121,6 +127,7 @@ class WebSocketProtocol(WebSocketCommonProtocol):
             self.loop.create_task(self.request_handler(message, self.channels))
         message = self.get_disconnect_message(code)
         self.loop.create_task(self.request_handler(message, self.channels))
+        self.cleanup()
 
     def connection_made(self, transport, http_version, method, url, headers):
         super().connection_made(transport)
