@@ -112,6 +112,15 @@ def test_make_header_content():
     assert header_content == b'Content-Length: 3\r\nfoo: bar\r\n'
 
 
+def get_request_body_chunk():
+    http_protocol = HttpProtocol(loop=None, request_handler=None,
+                                 error_handler=None)
+    message = http_protocol.get_request_body_chunk(b'foo', False, True)
+    message['content'] = b'foo'
+    message['closed'] = False
+    message['more_content'] = True
+
+
 def test_get_message():
     http_protocol = HttpProtocol(loop=None, request_handler=None,
                                  error_handler=None)
