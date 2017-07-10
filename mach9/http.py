@@ -3,6 +3,7 @@ import traceback
 from httptools import HttpParserUpgrade
 from httptools import HttpRequestParser, parse_url
 from httptools.parser.errors import HttpParserError
+from typing import Dict, List, Any, Awaitable
 
 from mach9.exceptions import (
     RequestTimeout, PayloadTooLarge, InvalidUsage, ServerError)
@@ -52,8 +53,8 @@ class HttpProtocol(asyncio.Protocol):
         '_total_request_size', '_timeout_handler', '_last_request_time',
         'get_current_time', 'body_channel', 'message')
 
-    def __init__(self, *, loop, request_handler, error_handler, log=None,
-                 signal=None, connections=set(), request_timeout=60,
+    def __init__(self, *, loop, request_handler: Awaitable, error_handler,
+                 log=None, signal=None, connections=set(), request_timeout=60,
                  request_max_size=None, has_log=True,
                  keep_alive=True, request_class=None,
                  netlog=None, get_current_time=None, _request_timeout=None,
@@ -195,7 +196,7 @@ class HttpProtocol(asyncio.Protocol):
             self.body_channel.send(body_chunk))
 
     def get_request_body_chunk(self, content: bytes, closed: bool,
-                               more_content: bool) -> dict:
+                               more_content: bool) -> Dict[str, Any]:
         '''
         http://channels.readthedocs.io/en/stable/asgi/www.html#request-body-chunk
         '''
@@ -206,7 +207,7 @@ class HttpProtocol(asyncio.Protocol):
         }
 
     def get_message(self, transport, http_version: str, method: bytes,
-                    url: bytes, headers: list) -> dict:
+                    url: bytes, headers: List[List[bytes]]) -> Dict[str, Any]:
         '''
         http://channels.readthedocs.io/en/stable/asgi/www.html#request
         '''
@@ -236,7 +237,7 @@ class HttpProtocol(asyncio.Protocol):
             'server': transport.get_extra_info('sockname')
         }
 
-    def check_headers(self, headers: list) -> dict:
+    def check_headers(self, headers: List[List[bytes]]) -> Dict[str, bool]:
         connection_close = False
         content_length = False
         for key, value in headers:
@@ -256,7 +257,7 @@ class HttpProtocol(asyncio.Protocol):
             self._last_request_time = self.get_current_time()
             self.cleanup()
 
-    def is_response_chunk(self, message):
+    def is_response_chunk(self, message: Dict[str, Any]) -> bool:
         return 'status' not in message and 'headers' not in message
 
     def make_header_content(self, headers, result_headers,
@@ -274,7 +275,7 @@ class HttpProtocol(asyncio.Protocol):
             header_content = b''.join(_header_content)
         return header_content
 
-    def send(self, message):
+    def send(self, message: Dict[str, Any]):
         transport = self.transport
         status = message.get('status')
         headers = message.get('headers')
