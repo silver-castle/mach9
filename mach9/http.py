@@ -1,6 +1,5 @@
 import asyncio
 import traceback
-from functools import partial
 from httptools import HttpParserUpgrade
 from httptools import HttpRequestParser, parse_url
 from httptools.parser.errors import HttpParserError
@@ -49,7 +48,7 @@ class HttpProtocol(asyncio.Protocol):
         # enable or disable access log / error log purpose
         'has_log', 'log', 'netlog',
         # connection management
-        '_is_upgrade', '_tasks',
+        '_is_upgrade',
         '_total_request_size', '_timeout_handler', '_last_request_time',
         'get_current_time', 'body_channel', 'message')
 
@@ -82,8 +81,8 @@ class HttpProtocol(asyncio.Protocol):
         self._total_request_size = 0
         self._timeout_handler = None
         self._last_request_time = None
-        # for task management
-        self._tasks = []
+        self._request_handler_task = None
+        self._request_stream_task = None
         self._is_upgrade = False
         # config.KEEP_ALIVE or not check_headers()['connection_close']
         self._keep_alive = keep_alive
@@ -99,11 +98,6 @@ class HttpProtocol(asyncio.Protocol):
                 and self.parser
                 and self.parser.should_keep_alive())
 
-    def cancel_tasks(self):
-        for t in self._tasks:
-            t.cancel()
-        self._tasks = []
-
     # -------------------------------------------- #
     # Connection
     # -------------------------------------------- #
@@ -118,7 +112,6 @@ class HttpProtocol(asyncio.Protocol):
     def connection_lost(self, exc):
         self.connections.discard(self)
         self._timeout_handler.cancel()
-        self.cancel_tasks()
 
     def connection_timeout(self):
         # Check if
@@ -128,7 +121,10 @@ class HttpProtocol(asyncio.Protocol):
             self._timeout_handler = (
                 self.loop.call_later(time_left, self.connection_timeout))
         else:
-            self.cancel_tasks()
+            if self._request_stream_task:
+                self._request_stream_task.cancel()
+            if self._request_handler_task:
+                self._request_handler_task.cancel()
             exception = self._request_timeout('Request Timeout')
             self.write_error(exception)
 
@@ -171,17 +167,6 @@ class HttpProtocol(asyncio.Protocol):
             self._is_upgrade = True
         self.headers.append([name, value])
 
-    def register_task(self, coro):
-        task = self.loop.create_task(coro)
-        self._tasks.append(task)
-
-        def pop_task(self, task):
-            try:
-                self._tasks.remove(task)
-            except ValueError:
-                pass
-        task.add_done_callback(partial(pop_task, self))
-
     def on_headers_complete(self):
         if self._is_upgrade:
             return
@@ -192,19 +177,22 @@ class HttpProtocol(asyncio.Protocol):
         channels['body'] = BodyChannel(self.transport)
         channels['reply'] = ReplyChannel(self)
         self.body_channel = channels['body']
-        self.register_task(self.request_handler(self.message, channels))
+        self._request_handler_task = self.loop.create_task(
+            self.request_handler(self.message, channels))
 
     def on_body(self, body: bytes):
         if self._is_upgrade:
             return
         body_chunk = self.get_request_body_chunk(body, False, True)
-        self.register_task(self.body_channel.send(body_chunk))
+        self._request_stream_task = self.loop.create_task(
+            self.body_channel.send(body_chunk))
 
     def on_message_complete(self):
         if self._is_upgrade:
             return
         body_chunk = self.get_request_body_chunk(b'', False, False)
-        self.register_task(self.body_channel.send(body_chunk))
+        self._request_stream_task = self.loop.create_task(
+            self.body_channel.send(body_chunk))
 
     def get_request_body_chunk(self, content: bytes, closed: bool,
                                more_content: bool) -> dict:
@@ -379,10 +367,11 @@ class HttpProtocol(asyncio.Protocol):
             self.log.error(message)
 
     def cleanup(self):
-        self.cancel_tasks()
         self.parser = None
         self.url = None
         self.headers = None
+        self._request_handler_task = None
+        self._request_stream_task = None
         self._total_request_size = 0
         self.body_channel = None
         self.message = None
