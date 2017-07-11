@@ -65,6 +65,7 @@ def test_non_str_headers():
 
     assert response.headers.get('answer') == '42'
 
+
 def test_invalid_response():
     app = Mach9('test_invalid_response')
 
@@ -92,19 +93,21 @@ def test_json():
 
     results = json_loads(response.text)
 
-    assert results.get('test') == True
+    assert results.get('test') is True
+
 
 def test_empty_json():
     app = Mach9('test_json')
 
     @app.route('/')
     async def handler(request):
-        assert request.json == None
+        assert request.json is None
         return json(request.json)
 
     request, response = app.test_client.get('/')
     assert response.status == 200
     assert response.text == 'null'
+
 
 def test_invalid_json():
     app = Mach9('test_json')
@@ -183,7 +186,6 @@ def test_token():
     assert request.token == token
 
 
-
 # ------------------------------------------------------------ #
 #  POST
 # ------------------------------------------------------------ #
@@ -215,23 +217,32 @@ def test_post_form_urlencoded():
     payload = 'test=OK'
     headers = {'content-type': 'application/x-www-form-urlencoded'}
 
-    request, response = app.test_client.post('/', data=payload, headers=headers)
+    request, response = app.test_client.post('/',
+                                             data=payload, headers=headers)
 
     assert request.form.get('test') == 'OK'
 
 
-def test_post_form_multipart_form_data():
+@pytest.mark.parametrize(
+    'payload', [
+        (
+            '------mach9\r\n'
+            'Content-Disposition: form-data; name="test"\r\n'
+            '\r\n'
+            'OK\r\n'
+            '------mach9--\r\n'
+            '------mach9\r\n'
+            'content-disposition: form-data; name="test"\r\n'
+            '\r\n'
+            'OK\r\n'
+            '------mach9--\r\n'),
+    ])
+def test_post_form_multipart_form_data(payload):
     app = Mach9('test_post_form_multipart_form_data')
 
     @app.route('/', methods=['POST'])
     async def handler(request):
         return text('OK')
-
-    payload = '------mach9\r\n' \
-              'Content-Disposition: form-data; name="test"\r\n' \
-              '\r\n' \
-              'OK\r\n' \
-              '------mach9--\r\n'
 
     headers = {'content-type': 'multipart/form-data; boundary=----mach9'}
 
