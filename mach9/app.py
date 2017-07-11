@@ -95,8 +95,8 @@ class Mach9:
         '''
         if not self.is_running:
             raise Mach9Exception(
-                'Loop can only be retrieved after the app has started '
-                'running. Not supported with `create_server` function')
+                'Loop can only be retrieved after the app has started'
+                ' running.')
         return get_event_loop()
 
     # -------------------------------------------------------------------- #
@@ -402,7 +402,7 @@ class Mach9:
     # -------------------------------------------------------------------- #
 
     def run(self, host='127.0.0.1', port=8000, debug=False, ssl=None,
-            sock=None, workers=1, backlog=100, register_sys_signals=True):
+            sock=None, workers=1, backlog=100):
         '''Run the HTTP Server and listen until keyboard interrupt or term
         signal. On termination, drain connections before closing.
 
@@ -415,13 +415,11 @@ class Mach9:
         :param workers: Number of processes
                             received before it is respected
         :param backlog:
-        :param register_sys_signals:
         :return: Nothing
         '''
         server_settings = self._helper(
             host=host, port=port, debug=debug, ssl=ssl, sock=sock,
             workers=workers, backlog=backlog,
-            register_sys_signals=register_sys_signals,
             has_log=self.log_config is not None)
 
         try:
@@ -441,20 +439,6 @@ class Mach9:
     def stop(self):
         '''This kills the Mach9'''
         get_event_loop().stop()
-
-    async def create_server(self, host='127.0.0.1', port=8000, debug=False,
-                            ssl=None, sock=None, backlog=100):
-        '''Asynchronous version of `run`.
-
-        NOTE: This does not support multiprocessing and is not the preferred
-              way to run a Mach9 application.
-        '''
-        server_settings = self._helper(
-            host=host, port=port, debug=debug, ssl=ssl, sock=sock,
-            loop=get_event_loop(), backlog=backlog, run_async=True,
-            has_log=self.log_config is not None)
-
-        return await self.serve(**server_settings)
 
     async def _run_request_middleware(self, request):
         # The if improves speed.  I don't know why
@@ -480,9 +464,8 @@ class Mach9:
 
     def _helper(self, host='127.0.0.1', port=8000, debug=False,
                 ssl=None, sock=None, workers=1, loop=None,
-                backlog=100, register_sys_signals=True,
-                run_async=False, has_log=True):
-        '''Helper function used by `run` and `create_server`.'''
+                backlog=100, has_log=True):
+        '''Helper function used by `run`.'''
 
         if isinstance(ssl, dict):
             # try common aliaseses
@@ -515,7 +498,6 @@ class Mach9:
             'request_max_size': self.config.REQUEST_MAX_SIZE,
             'keep_alive': self.config.KEEP_ALIVE,
             'loop': loop,
-            'register_sys_signals': register_sys_signals,
             'request_class': self.request_class,
             'backlog': backlog,
             'has_log': has_log
@@ -540,9 +522,6 @@ class Mach9:
 
         if debug:
             self.log.setLevel(logging.DEBUG)
-
-        if run_async:
-            server_settings['run_async'] = True
 
         # Serve
         if host and port:
