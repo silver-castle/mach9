@@ -32,8 +32,7 @@ def serve(host, port, request_handler, error_handler, before_start=None,
           after_start=None, before_stop=None, after_stop=None, debug=False,
           request_timeout=60, ssl=None, sock=None, request_max_size=None,
           reuse_port=False, loop=None, protocol=None, backlog=100,
-          register_sys_signals=True, run_async=False, connections=None,
-          signal=None, has_log=True, keep_alive=True,
+          connections=None, signal=None, has_log=True, keep_alive=True,
           log=None, netlog=None, request_class=None,
           update_current_time=None, get_current_time=None):
     """Start asynchronous HTTP Server on an individual process.
@@ -68,9 +67,9 @@ def serve(host, port, request_handler, error_handler, before_start=None,
     :param request_class:
     :return: Nothing
     """
-    if not run_async:
-        loop = uvloop.new_event_loop()
-        asyncio.set_event_loop(loop)
+
+    loop = uvloop.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     if debug:
         loop.set_debug(debug)
@@ -108,9 +107,6 @@ def serve(host, port, request_handler, error_handler, before_start=None,
     # pull it once per minute
     loop.call_soon(partial(update_current_time, loop))
 
-    if run_async:
-        return server_coroutine
-
     try:
         http_server = loop.run_until_complete(server_coroutine)
     except:
@@ -120,13 +116,12 @@ def serve(host, port, request_handler, error_handler, before_start=None,
     trigger_events(after_start, loop)
 
     # Register signals for graceful termination
-    if register_sys_signals:
-        for _signal in (SIGINT, SIGTERM):
-            try:
-                loop.add_signal_handler(_signal, loop.stop)
-            except NotImplementedError:
-                log.warn('Mach9 tried to use loop.add_signal_handler but it is'
-                         ' not implemented on this platform.')
+    for _signal in (SIGINT, SIGTERM):
+        try:
+            loop.add_signal_handler(_signal, loop.stop)
+        except NotImplementedError:
+            log.warn('Mach9 tried to use loop.add_signal_handler but it is'
+                     ' not implemented on this platform.')
     pid = os.getpid()
     try:
         log.info('Starting worker [{}]'.format(pid))
