@@ -45,7 +45,6 @@ class HttpProtocol(asyncio.Protocol):
         'parser', 'url', 'headers',
         # request config
         'request_handler', 'request_timeout', 'request_max_size',
-        'request_class',
         # enable or disable access log / error log purpose
         'has_log', 'log', 'netlog',
         # connection management
@@ -56,10 +55,9 @@ class HttpProtocol(asyncio.Protocol):
     def __init__(self, *, loop, request_handler: Awaitable, error_handler,
                  log=None, signal=None, connections=set(), request_timeout=60,
                  request_max_size=None, has_log=True,
-                 keep_alive=True, request_class=None,
-                 netlog=None, get_current_time=None, _request_timeout=None,
-                 _payload_too_large=None, _invalid_usage=None,
-                 _server_error=None):
+                 keep_alive=True, netlog=None, get_current_time=None,
+                 _request_timeout=None, _payload_too_large=None,
+                 _invalid_usage=None, _server_error=None):
         '''signal is shared'''
         self.loop = loop
         self.transport = None
@@ -74,7 +72,6 @@ class HttpProtocol(asyncio.Protocol):
         self.netlog = netlog
         self.connections = connections
         self.request_handler = request_handler
-        self.request_class = request_class
         self.error_handler = error_handler
         self.request_timeout = request_timeout
         self.request_max_size = request_max_size
@@ -323,30 +320,18 @@ class HttpProtocol(asyncio.Protocol):
 
     def write_error(self, exception):
         try:
-            request = None
-            if self.message:
-                request = self.request_class(self.message)
-            response = self.error_handler.response(request, exception)
-            self.send(response.get_message(False))
-            if self.has_log:
-                extra = {
-                    'status': response.status,
-                    'host': '',
-                    'request': str(request) + str(self.url)
-                }
-                if response and hasattr(response, 'body'):
-                    extra['byte'] = len(response.body)
-                else:
-                    extra['byte'] = -1
-                if request:
-                    extra['host'] = '%s:%d' % request.ip,
-                    extra['request'] = '%s %s' % (request.method,
-                                                  self.url)
-                self.netlog.info('', extra=extra)
+            content = 'Error: {}'.format(exception).encode()
+            status = getattr(exception, 'status_code', 500)
+            headers = []
+            self.send({
+                'status': status,
+                'headers': headers,
+                'content': content,
+                'more_content': False
+            })
         except RuntimeError:
             self.log.error(
-                'Connection lost before error written @ {}'.format(
-                    request.ip if self.request else 'Unknown'))
+                'Connection lost before error written.')
         except Exception as e:
             self.bail_out(
                 'Writing error failed, connection closed {}'.format(repr(e)),
