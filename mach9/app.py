@@ -498,7 +498,6 @@ class Mach9:
             'request_max_size': self.config.REQUEST_MAX_SIZE,
             'keep_alive': self.config.KEEP_ALIVE,
             'loop': loop,
-            'request_class': self.request_class,
             'backlog': backlog,
             'has_log': has_log
         }
