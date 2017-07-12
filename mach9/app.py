@@ -7,33 +7,27 @@ from functools import partial
 from inspect import isawaitable, stack, getmodulename
 from traceback import format_exc
 from urllib.parse import urlencode, urlunparse
-from ssl import create_default_context, Purpose
 
 from mach9.config import Config, LOGGING
-from mach9.exceptions import ServerError, URLBuildError, Mach9Exception
+from mach9.exceptions import ServerError, URLBuildError
 from mach9.handlers import ErrorHandler
 from mach9.log import log as _log
 from mach9.log import log as _netlog
 from mach9.response import HTTPResponse, StreamHTTPResponse, WebsocketResponse
 from mach9.router import Router
-from mach9.signal import Signal
-from mach9.server import serve as _serve
-from mach9.server import serve_multiple as _serve_multiple
-from mach9.http import HttpProtocol
 from mach9.request import Request
 from mach9.static import register as static_register
 from mach9.testing import Mach9TestClient
 from mach9.views import CompositionView
-from mach9.timer import update_current_time as _update_current_time
-from mach9.timer import get_current_time as _get_current_time
+from mach9.server import Server
 
 
 class Mach9:
 
     def __init__(self, name=None, router=None, error_handler=None,
-                 load_env=True, request_class=None, protocol=None,
-                 serve=None, serve_multiple=None, log=None, netlog=None,
-                 log_config=LOGGING, update_current_time=None,
+                 load_env=True, request_class=None, debug=None,
+                 log=None, netlog=None,
+                 log_config=LOGGING,
                  get_current_time=None, composition_view=None,
                  stream_http_response_class=None,
                  websocket_response_class=None):
@@ -60,63 +54,39 @@ class Mach9:
 
         _composition_view = composition_view or CompositionView
 
+        self.config = config = Config(load_env=load_env)
+        self.request_max_size = config.REQUEST_MAX_SIZE
+        self.request_timeout = config.REQUEST_TIMEOUT
+        self.keep_alive = config.KEEP_ALIVE
         self.name = name
         self.websocket_channels = {}
         self.composition_view_class = _composition_view
         self.router = router or Router(_composition_view)
         self.request_class = request_class or Request
         self.error_handler = error_handler or ErrorHandler(self.log)
-        self.config = Config(load_env=load_env)
+        self.debug = debug
+        self.error_handler.debug = debug
         self.log_config = log_config
         self.request_middleware = deque()
         self.response_middleware = deque()
         self.blueprints = {}
         self._blueprint_order = []
-        self.protocol = protocol or HttpProtocol
         self.stream_http_response_class = (
             stream_http_response_class or StreamHTTPResponse)
         self.websocket_response_class = (
             websocket_response_class or WebsocketResponse)
-        self.debug = None
         self.sock = None
         self.listeners = defaultdict(list)
         self.is_running = False
-        self.serve = serve or _serve
-        self.serve_multiple = serve_multiple or _serve_multiple
         self.netlog = netlog or _netlog
-        self.update_current_time = update_current_time or _update_current_time
-        self.get_current_time = get_current_time or _get_current_time
 
     @property
     def loop(self):
-        '''Synonymous with asyncio.get_event_loop().
-
-        Only supported when using the `app.run` method.
-        '''
-        if not self.is_running:
-            raise Mach9Exception(
-                'Loop can only be retrieved after the app has started'
-                ' running.')
         return get_event_loop()
 
     # -------------------------------------------------------------------- #
     # Registration
     # -------------------------------------------------------------------- #
-
-    def add_task(self, task):
-        '''Schedule a task to run later, after the loop has started.
-        Different from asyncio.ensure_future in that it does not
-        also return a future, and the actual ensure_future call
-        is delayed until before server start.
-
-        :param task: future, couroutine or awaitable
-        '''
-        @self.listener('before_server_start')
-        def run(app, loop):
-            if callable(task):
-                loop.create_task(task())
-            else:
-                loop.create_task(task)
 
     # Decorator
     def listener(self, event):
@@ -401,45 +371,6 @@ class Mach9:
     # Execution
     # -------------------------------------------------------------------- #
 
-    def run(self, host='127.0.0.1', port=8000, debug=False, ssl=None,
-            sock=None, workers=1, backlog=100):
-        '''Run the HTTP Server and listen until keyboard interrupt or term
-        signal. On termination, drain connections before closing.
-
-        :param host: Address to host on
-        :param port: Port to host on
-        :param debug: Enables debug output (slows server)
-        :param ssl: SSLContext, or location of certificate and key
-                            for SSL encryption of worker(s)
-        :param sock: Socket for the server to accept connections from
-        :param workers: Number of processes
-                            received before it is respected
-        :param backlog:
-        :return: Nothing
-        '''
-        server_settings = self._helper(
-            host=host, port=port, debug=debug, ssl=ssl, sock=sock,
-            workers=workers, backlog=backlog,
-            has_log=self.log_config is not None)
-
-        try:
-            self.is_running = True
-            if workers == 1:
-                self.serve(**server_settings)
-            else:
-                self.serve_multiple(server_settings, workers)
-        except:
-            self.log.exception(
-                'Experienced exception while trying to serve')
-            raise
-        finally:
-            self.is_running = False
-        self.log.info('Server Stopped')
-
-    def stop(self):
-        '''This kills the Mach9'''
-        get_event_loop().stop()
-
     async def _run_request_middleware(self, request):
         # The if improves speed.  I don't know why
         if self.request_middleware:
@@ -462,73 +393,20 @@ class Mach9:
                     break
         return response
 
-    def _helper(self, host='127.0.0.1', port=8000, debug=False,
-                ssl=None, sock=None, workers=1, loop=None,
-                backlog=100, has_log=True):
-        '''Helper function used by `run`.'''
-
-        if isinstance(ssl, dict):
-            # try common aliaseses
-            cert = ssl.get('cert') or ssl.get('certificate')
-            key = ssl.get('key') or ssl.get('keyfile')
-            if cert is None or key is None:
-                raise ValueError('SSLContext or certificate and key required.')
-            context = create_default_context(purpose=Purpose.CLIENT_AUTH)
-            context.load_cert_chain(cert, keyfile=key)
-            ssl = context
-
-        self.error_handler.debug = debug
+    def run(self, host='127.0.0.1', port=8000, ssl=None, debug=False,
+            sock=None, workers=1, backlog=100, protocol=None):
         self.debug = debug
+        self.error_handler.debug = debug
+        self.server = Server(self)
+        self.server.run(host=host, port=port, ssl=ssl,
+                        sock=sock, workers=workers, protocol=protocol)
 
-        server_settings = {
-            'protocol': self.protocol,
-            'request_handler': self,
-            'error_handler': self.error_handler,
-            'log': self.log,
-            'netlog': self.netlog,
-            'update_current_time': self.update_current_time,
-            'get_current_time': self.get_current_time,
-            'host': host,
-            'port': port,
-            'sock': sock,
-            'ssl': ssl,
-            'signal': Signal(),
-            'debug': debug,
-            'request_timeout': self.config.REQUEST_TIMEOUT,
-            'request_max_size': self.config.REQUEST_MAX_SIZE,
-            'keep_alive': self.config.KEEP_ALIVE,
-            'loop': loop,
-            'backlog': backlog,
-            'has_log': has_log
-        }
+    def stop(self):
+        get_event_loop().stop()
 
-        # -------------------------------------------- #
-        # Register start/stop events
-        # -------------------------------------------- #
-
-        for event_name, settings_name, reverse in (
-                ('before_server_start', 'before_start', False),
-                ('after_server_start', 'after_start', False),
-                ('before_server_stop', 'before_stop', True),
-                ('after_server_stop', 'after_stop', True),
-        ):
-            listeners = self.listeners[event_name].copy()
-            if reverse:
-                listeners.reverse()
-            # Prepend mach9 to the arguments when listeners are triggered
-            listeners = [partial(listener, self) for listener in listeners]
-            server_settings[settings_name] = listeners
-
-        if debug:
-            self.log.setLevel(logging.DEBUG)
-
-        # Serve
-        if host and port:
-            proto = 'http'
-            if ssl is not None:
-                proto = 'https'
-            self.log.info('Goin\' Fast @ {}://{}:{}'.format(proto, host, port))
-        return server_settings
+    # -------------------------------------------------------------------- #
+    # Request Handling
+    # -------------------------------------------------------------------- #
 
     async def get_body(self, message, channels):
         body = message.get('body', b'')
@@ -540,9 +418,6 @@ class Mach9:
                     break
         return body
 
-    # -------------------------------------------------------------------- #
-    # Request Handling
-    # -------------------------------------------------------------------- #
     async def __call__(self, message, channels):
         try:
             request = None

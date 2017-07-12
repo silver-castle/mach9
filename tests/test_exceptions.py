@@ -114,7 +114,7 @@ def test_exception_in_exception_handler_debug_off(exception_app):
     assert response.body == b'An error occurred while handling an error'
 
 
-def test_exception_in_exception_handler_debug_off(exception_app):
+def test_exception_in_exception_handler_debug_on(exception_app):
     """Test that an exception thrown in an error handler is handled"""
     request, response = exception_app.test_client.get(
         '/error_in_error_handler_handler',

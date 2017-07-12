@@ -55,9 +55,9 @@ class Mach9TestClient:
                 log.error(
                     'Exception:\n{}'.format(traceback.format_exc()))
                 exceptions.append(e)
-            self.app.stop()
-
-        self.app.run(host=HOST, debug=debug, port=PORT, **server_kwargs)
+            finally:
+                self.app.server.stop()
+        self.app.run(host=HOST, port=PORT, debug=debug, **server_kwargs)
         self.app.listeners['after_server_start'].pop()
 
         if exceptions:

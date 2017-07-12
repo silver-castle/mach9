@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import os
 import uvloop
 from functools import partial
 from inspect import isawaitable
 from multiprocessing import Process
+from ssl import create_default_context, Purpose
 from signal import (
     SIGTERM, SIGINT,
     signal as signal_func,
@@ -15,180 +17,233 @@ from socket import (
     SO_REUSEADDR,
 )
 
-
-def trigger_events(events, loop):
-    """Trigger event callbacks (functions or async)
-
-    :param events: one or more sync or async functions to execute
-    :param loop: event loop
-    """
-    for event in events:
-        result = event(loop)
-        if isawaitable(result):
-            loop.run_until_complete(result)
+from mach9.http import HttpProtocol
+from mach9.signal import Signal
+from mach9.timer import update_current_time
 
 
-def serve(host, port, request_handler, error_handler, before_start=None,
-          after_start=None, before_stop=None, after_stop=None, debug=False,
-          request_timeout=60, ssl=None, sock=None, request_max_size=None,
-          reuse_port=False, loop=None, protocol=None, backlog=100,
-          connections=None, signal=None, has_log=True, keep_alive=True,
-          log=None, netlog=None, update_current_time=None,
-          get_current_time=None):
-    """Start asynchronous HTTP Server on an individual process.
+class Server:
 
-    :param host: Address to host on
-    :param port: Port to host on
-    :param request_handler: Mach9 request handler with middleware
-    :param error_handler: Mach9 error handler with middleware
-    :param before_start: function to be executed before the server starts
-                         listening. Takes arguments `app` instance and `loop`
-    :param after_start: function to be executed after the server starts
-                        listening. Takes  arguments `app` instance and `loop`
-    :param before_stop: function to be executed when a stop signal is
-                        received before it is respected. Takes arguments
-                        `app` instance and `loop`
-    :param after_stop: function to be executed when a stop signal is
-                       received after it is respected. Takes arguments
-                       `app` instance and `loop`
-    :param debug: enables debug output (slows server)
-    :param request_timeout: time in seconds
-    :param ssl: SSLContext
-    :param sock: Socket for the server to accept connections from
-    :param request_max_size: size in bytes, `None` for no limit
-    :param reuse_port: `True` for multiple workers
-    :param loop: asyncio compatible event loop
-    :param protocol: subclass of asyncio protocol class
-    :param has_log: disable/enable access log and error log
-    :param log:
-    :param netlog:
-    :param update_current_time:
-    :param get_current_time:
-    :return: Nothing
-    """
+    def __init__(self, app):
+        self.app = app
+        self.request_handler = app
+        self.signal = Signal()
+        self.log = app.log
+        self.log_config = app.log_config
+        self.listeners = app.listeners
+        self.debug = app.debug
+        self.netlog = app.netlog
+        self.request_timeout = app.request_timeout
+        self.request_max_size = app.request_max_size
+        self.keep_alive = app.keep_alive
 
-    loop = uvloop.new_event_loop()
-    asyncio.set_event_loop(loop)
+    def get_server_setting(self, protocol, host='127.0.0.1', port=8000,
+                           debug=False, ssl=None, sock=None, workers=1,
+                           loop=None, backlog=100, has_log=True):
+        '''Helper function used by `run`.'''
 
-    if debug:
-        loop.set_debug(debug)
+        if isinstance(ssl, dict):
+            # try common aliaseses
+            cert = ssl.get('cert') or ssl.get('certificate')
+            key = ssl.get('key') or ssl.get('keyfile')
+            if cert is None or key is None:
+                raise ValueError('SSLContext or certificate and key required.')
+            context = create_default_context(purpose=Purpose.CLIENT_AUTH)
+            context.load_cert_chain(cert, keyfile=key)
+            ssl = context
 
-    trigger_events(before_start, loop)
+        server_settings = {
+            'protocol': protocol,
+            'request_handler': self.request_handler,
+            'log': self.log,
+            'netlog': self.netlog,
+            'host': host,
+            'port': port,
+            'sock': sock,
+            'ssl': ssl,
+            'signal': self.signal,
+            'debug': debug,
+            'request_timeout': self.request_timeout,
+            'request_max_size': self.request_max_size,
+            'keep_alive': self.keep_alive,
+            'loop': loop,
+            'backlog': backlog,
+            'has_log': has_log
+        }
+        for event_name, settings_name, reverse in (
+                ('before_server_start', 'before_start', False),
+                ('after_server_start', 'after_start', False),
+                ('before_server_stop', 'before_stop', True),
+                ('after_server_stop', 'after_stop', True),
+        ):
+            listeners = self.listeners[event_name].copy()
+            if reverse:
+                listeners.reverse()
+            # Prepend mach9 to the arguments when listeners are triggered
+            listeners = [partial(listener, self.app) for listener in listeners]
+            server_settings[settings_name] = listeners
 
-    connections = connections if connections is not None else set()
-    server = partial(
-        protocol,
-        loop=loop,
-        connections=connections,
-        signal=signal,
-        request_handler=request_handler,
-        error_handler=error_handler,
-        request_timeout=request_timeout,
-        request_max_size=request_max_size,
-        get_current_time=get_current_time,
-        has_log=has_log,
-        keep_alive=keep_alive,
-        log=log,
-        netlog=netlog
-    )
+        if debug:
+            self.log.setLevel(logging.DEBUG)
 
-    server_coroutine = loop.create_server(
-        server,
-        host,
-        port,
-        ssl=ssl,
-        reuse_port=reuse_port,
-        sock=sock,
-        backlog=backlog
-    )
-    # Instead of pulling time at the end of every request,
-    # pull it once per minute
-    loop.call_soon(partial(update_current_time, loop))
+        # Serve
+        if host and port:
+            proto = 'http'
+            if ssl is not None:
+                proto = 'https'
+            self.log.info('Goin\' Fast @ {}://{}:{}'.format(proto, host, port))
+        return server_settings
 
-    try:
-        http_server = loop.run_until_complete(server_coroutine)
-    except:
-        log.exception("Unable to start server")
-        return
+    def run(self, host='127.0.0.1', port=8000, ssl=None,
+            sock=None, workers=1, backlog=100, protocol=None):
+        protocol = protocol or HttpProtocol
+        server_settings = self.get_server_setting(
+            protocol, host=host, port=port, debug=self.debug, ssl=ssl,
+            sock=sock, workers=workers, backlog=backlog,
+            has_log=self.log_config is not None)
 
-    trigger_events(after_start, loop)
-
-    # Register signals for graceful termination
-    for _signal in (SIGINT, SIGTERM):
         try:
-            loop.add_signal_handler(_signal, loop.stop)
-        except NotImplementedError:
-            log.warn('Mach9 tried to use loop.add_signal_handler but it is'
-                     ' not implemented on this platform.')
-    pid = os.getpid()
-    try:
-        log.info('Starting worker [{}]'.format(pid))
-        loop.run_forever()
-    finally:
-        log.info("Stopping worker [{}]".format(pid))
+            if workers == 1:
+                self.serve(**server_settings)
+            else:
+                self.serve_multiple(server_settings, workers)
+        except:
+            self.log.exception(
+                'Experienced exception while trying to serve')
+        self.log.info('Server Stopped')
 
-        # Run the on_stop function if provided
-        trigger_events(before_stop, loop)
+    def trigger_events(self, events, loop):
+        """Trigger event callbacks (functions or async)
 
-        # Wait for event loop to finish and all connections to drain
-        http_server.close()
-        loop.run_until_complete(http_server.wait_closed())
+        :param events: one or more sync or async functions to execute
+        :param loop: event loop
+        """
+        for event in events:
+            result = event(loop)
+            if isawaitable(result):
+                loop.run_until_complete(result)
 
-        # Complete all tasks on the loop
-        signal.stopped = True
-        for connection in connections:
-            connection.close_if_idle()
+    def serve(self, host, port, request_handler,
+              before_start=None,
+              after_start=None, before_stop=None, after_stop=None, debug=False,
+              request_timeout=60, ssl=None, sock=None, request_max_size=None,
+              reuse_port=False, loop=None, protocol=None, backlog=100,
+              connections=None, signal=None, has_log=True, keep_alive=True,
+              log=None, netlog=None):
+        self.loop = loop = uvloop.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-        while connections:
-            loop.run_until_complete(asyncio.sleep(0.1))
+        if debug:
+            loop.set_debug(debug)
 
-        trigger_events(after_stop, loop)
+        self.trigger_events(before_start, loop)
 
-        loop.close()
+        connections = connections if connections is not None else set()
+        server = partial(
+            protocol,
+            loop=loop,
+            connections=connections,
+            signal=signal,
+            request_handler=request_handler,
+            request_timeout=request_timeout,
+            request_max_size=request_max_size,
+            has_log=has_log,
+            keep_alive=keep_alive,
+            log=log,
+            netlog=netlog
+        )
 
+        server_coroutine = loop.create_server(
+            server,
+            host,
+            port,
+            ssl=ssl,
+            reuse_port=reuse_port,
+            sock=sock,
+            backlog=backlog
+        )
+        # Instead of pulling time at the end of every request,
+        # pull it once per minute
+        loop.call_soon(partial(update_current_time, loop))
 
-def serve_multiple(server_settings, workers):
-    """Start multiple server processes simultaneously.  Stop on interrupt
-    and terminate signals, and drain connections when complete.
+        try:
+            http_server = loop.run_until_complete(server_coroutine)
+        except:
+            log.exception("Unable to start server")
+            return
 
-    :param server_settings: kw arguments to be passed to the serve function
-    :param workers: number of workers to launch
-    :param stop_event: if provided, is used as a stop signal
-    :return:
-    """
-    server_settings['reuse_port'] = True
+        self.trigger_events(after_start, loop)
 
-    # Handling when custom socket is not provided.
-    if server_settings.get('sock') is None:
-        sock = socket()
-        sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        sock.bind((server_settings['host'], server_settings['port']))
-        sock.set_inheritable(True)
-        server_settings['sock'] = sock
-        server_settings['host'] = None
-        server_settings['port'] = None
-    log = server_settings['log']
+        # Register signals for graceful termination
+        for _signal in (SIGINT, SIGTERM):
+            try:
+                loop.add_signal_handler(_signal, loop.stop)
+            except NotImplementedError:
+                log.warn('Mach9 tried to use loop.add_signal_handler but it is'
+                         ' not implemented on this platform.')
+        pid = os.getpid()
+        try:
+            log.info('Starting worker [{}]'.format(pid))
+            loop.run_forever()
+        finally:
+            log.info("Stopping worker [{}]".format(pid))
 
-    def sig_handler(signal, frame):
-        log.info("Received signal {}. Shutting down.".format(
-            Signals(signal).name))
+            # Run the on_stop function if provided
+            self.trigger_events(before_stop, loop)
+
+            # Wait for event loop to finish and all connections to drain
+            http_server.close()
+            loop.run_until_complete(http_server.wait_closed())
+
+            # Complete all tasks on the loop
+            signal.stopped = True
+            for connection in connections:
+                connection.close_if_idle()
+
+            while connections:
+                loop.run_until_complete(asyncio.sleep(0.1))
+
+            self.trigger_events(after_stop, loop)
+
+            loop.close()
+
+    def serve_multiple(self, server_settings, workers):
+        server_settings['reuse_port'] = True
+
+        # Handling when custom socket is not provided.
+        if server_settings.get('sock') is None:
+            sock = socket()
+            sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+            sock.bind((server_settings['host'], server_settings['port']))
+            sock.set_inheritable(True)
+            server_settings['sock'] = sock
+            server_settings['host'] = None
+            server_settings['port'] = None
+        log = server_settings['log']
+
+        def sig_handler(signal, frame):
+            log.info("Received signal {}. Shutting down.".format(
+                Signals(signal).name))
+            for process in processes:
+                os.kill(process.pid, SIGINT)
+
+        signal_func(SIGINT, lambda s, f: sig_handler(s, f))
+        signal_func(SIGTERM, lambda s, f: sig_handler(s, f))
+
+        processes = []
+        for _ in range(workers):
+            process = Process(target=self.serve, kwargs=server_settings)
+            process.daemon = True
+            process.start()
+            processes.append(process)
+
         for process in processes:
-            os.kill(process.pid, SIGINT)
+            process.join()
 
-    signal_func(SIGINT, lambda s, f: sig_handler(s, f))
-    signal_func(SIGTERM, lambda s, f: sig_handler(s, f))
+        # the above processes will block this until they're stopped
+        for process in processes:
+            process.terminate()
+        server_settings.get('sock').close()
 
-    processes = []
-    for _ in range(workers):
-        process = Process(target=serve, kwargs=server_settings)
-        process.daemon = True
-        process.start()
-        processes.append(process)
-
-    for process in processes:
-        process.join()
-
-    # the above processes will block this until they're stopped
-    for process in processes:
-        process.terminate()
-    server_settings.get('sock').close()
+    def stop(self):
+        self.loop.stop()

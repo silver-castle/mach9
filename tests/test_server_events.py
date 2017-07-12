@@ -1,4 +1,3 @@
-from io import StringIO
 from random import choice
 from string import ascii_letters
 import signal
