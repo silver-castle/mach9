@@ -9,3 +9,4 @@ tox
 ujson
 uvloop
 websockets
+pytest-cov
