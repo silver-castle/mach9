@@ -4,7 +4,7 @@ from mach9.response import text
 
 def test_payload_too_large_at_data_received_default():
     data_received_default_app = Mach9('data_received_default')
-    data_received_default_app.config.REQUEST_MAX_SIZE = 1
+    data_received_default_app.request_max_size = 1
 
     @data_received_default_app.route('/1')
     async def handler2(request):
@@ -18,7 +18,7 @@ def test_payload_too_large_at_data_received_default():
 
 def test_payload_too_large_at_on_header_default():
     on_header_default_app = Mach9('on_header')
-    on_header_default_app.config.REQUEST_MAX_SIZE = 500
+    on_header_default_app.request_max_size = 500
 
     @on_header_default_app.post('/1')
     async def handler3(request):

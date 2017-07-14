@@ -11,8 +11,7 @@ class Transport:
 
 
 def test_check_headers():
-    protocol = HttpProtocol(loop=None, request_handler=None,
-                            error_handler=None)
+    protocol = HttpProtocol(loop=None, request_handler=None)
     result_headers = protocol.check_headers([])
     assert result_headers['connection_close'] is False
     assert result_headers['content_length'] is False
@@ -40,8 +39,7 @@ def test_check_headers():
 
 
 def test_is_reponse_chunk():
-    protocol = HttpProtocol(loop=None, request_handler=None,
-                            error_handler=None)
+    protocol = HttpProtocol(loop=None, request_handler=None)
     result = protocol.is_response_chunk({'a': 1})
     assert result is True
     result = protocol.is_response_chunk({'status': 1})
@@ -53,8 +51,7 @@ def test_is_reponse_chunk():
 
 
 def test_make_header_content():
-    protocol = HttpProtocol(loop=None, request_handler=None,
-                            error_handler=None)
+    protocol = HttpProtocol(loop=None, request_handler=None)
     result_headers = {
         'connection_close': False,
         'content_length': False
@@ -113,8 +110,7 @@ def test_make_header_content():
 
 
 def get_request_body_chunk():
-    http_protocol = HttpProtocol(loop=None, request_handler=None,
-                                 error_handler=None)
+    http_protocol = HttpProtocol(loop=None, request_handler=None,)
     message = http_protocol.get_request_body_chunk(b'foo', False, True)
     message['content'] = b'foo'
     message['closed'] = False
@@ -122,8 +118,7 @@ def get_request_body_chunk():
 
 
 def test_get_message():
-    http_protocol = HttpProtocol(loop=None, request_handler=None,
-                                 error_handler=None)
+    http_protocol = HttpProtocol(loop=None, request_handler=None)
     transport = Transport()
     message = http_protocol.get_message(
         transport,

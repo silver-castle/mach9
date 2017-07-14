@@ -5,10 +5,9 @@ from httptools import HttpRequestParser, parse_url
 from httptools.parser.errors import HttpParserError
 from typing import Dict, List, Any, Awaitable
 
-from mach9.exceptions import (
-    RequestTimeout, PayloadTooLarge, InvalidUsage, ServerError)
 from mach9.response import ALL_STATUS_CODES
 from mach9.websocket import upgrade_to_websocket
+from mach9.timer import get_current_time
 
 
 class BodyChannel(asyncio.Queue):
@@ -36,9 +35,6 @@ class ReplyChannel:
 
 class HttpProtocol(asyncio.Protocol):
     __slots__ = (
-        # exceptions
-        '_request_timeout', '_payload_too_large', '_invalid_usage',
-        '_server_error',
         # event loop, connection
         'loop', 'transport', 'connections', 'signal',
         # request params
@@ -50,12 +46,12 @@ class HttpProtocol(asyncio.Protocol):
         # connection management
         '_is_upgrade',
         '_total_request_size', '_timeout_handler', '_last_request_time',
-        'get_current_time', 'body_channel', 'message')
+        'body_channel', 'message')
 
-    def __init__(self, *, loop, request_handler: Awaitable, error_handler,
+    def __init__(self, *, loop, request_handler: Awaitable,
                  log=None, signal=None, connections=set(), request_timeout=60,
                  request_max_size=None, has_log=True,
-                 keep_alive=True, netlog=None, get_current_time=None,
+                 keep_alive=True, netlog=None,
                  _request_timeout=None, _payload_too_large=None,
                  _invalid_usage=None, _server_error=None):
         '''signal is shared'''
@@ -72,10 +68,8 @@ class HttpProtocol(asyncio.Protocol):
         self.netlog = netlog
         self.connections = connections
         self.request_handler = request_handler
-        self.error_handler = error_handler
         self.request_timeout = request_timeout
         self.request_max_size = request_max_size
-        self.get_current_time = get_current_time
         self._total_request_size = 0
         self._timeout_handler = None
         self._last_request_time = None
@@ -84,10 +78,6 @@ class HttpProtocol(asyncio.Protocol):
         self._is_upgrade = False
         # config.KEEP_ALIVE or not check_headers()['connection_close']
         self._keep_alive = keep_alive
-        self._request_timeout = _request_timeout or RequestTimeout
-        self._payload_too_large = _payload_too_large or PayloadTooLarge
-        self._invalid_usage = _invalid_usage or InvalidUsage
-        self._server_error = _server_error or ServerError
 
     @property
     def keep_alive(self):
@@ -105,7 +95,7 @@ class HttpProtocol(asyncio.Protocol):
         self._timeout_handler = self.loop.call_later(
             self.request_timeout, self.connection_timeout)
         self.transport = transport
-        self._last_request_time = self.get_current_time()
+        self._last_request_time = get_current_time()
 
     def connection_lost(self, exc):
         self.connections.discard(self)
@@ -113,7 +103,7 @@ class HttpProtocol(asyncio.Protocol):
 
     def connection_timeout(self):
         # Check if
-        time_elapsed = self.get_current_time() - self._last_request_time
+        time_elapsed = get_current_time() - self._last_request_time
         if time_elapsed < self.request_timeout:
             time_left = self.request_timeout - time_elapsed
             self._timeout_handler = (
@@ -123,7 +113,7 @@ class HttpProtocol(asyncio.Protocol):
                 self._request_stream_task.cancel()
             if self._request_handler_task:
                 self._request_handler_task.cancel()
-            exception = self._request_timeout('Request Timeout')
+            exception = (408, 'Request Timeout')
             self.write_error(exception)
 
     # -------------------------------------------- #
@@ -135,7 +125,7 @@ class HttpProtocol(asyncio.Protocol):
         # memory limits
         self._total_request_size += len(data)
         if self._total_request_size > self.request_max_size:
-            exception = self._payload_too_large('Payload Too Large')
+            exception = (413, 'Payload Too Large')
             self.write_error(exception)
 
         # Create parser if this is the first time we're receiving data
@@ -149,7 +139,7 @@ class HttpProtocol(asyncio.Protocol):
         except HttpParserUpgrade:
             upgrade_to_websocket(self)
         except HttpParserError:
-            exception = self._invalid_usage('Bad Request')
+            exception = (400, 'Bad Request')
             self.write_error(exception)
 
     def on_url(self, url: bytes):
@@ -159,7 +149,7 @@ class HttpProtocol(asyncio.Protocol):
         # for websocket
         name = name.lower()
         if name == b'content-length' and int(value) > self.request_max_size:
-            exception = self._payload_too_large('Payload Too Large')
+            exception = (413, 'Payload Too Large')
             self.write_error(exception)
         if name == b'upgrade':
             self._is_upgrade = True
@@ -251,7 +241,7 @@ class HttpProtocol(asyncio.Protocol):
         if not more_content and not keep_alive:
             self.transport.close()
         elif not more_content and keep_alive:
-            self._last_request_time = self.get_current_time()
+            self._last_request_time = get_current_time()
             self.cleanup()
 
     def is_response_chunk(self, message: Dict[str, Any]) -> bool:
@@ -320,8 +310,8 @@ class HttpProtocol(asyncio.Protocol):
 
     def write_error(self, exception):
         try:
-            content = 'Error: {}'.format(exception).encode()
-            status = getattr(exception, 'status_code', 500)
+            status, content = exception
+            content = 'Error: {}'.format(content).encode()
             headers = []
             self.send({
                 'status': status,
@@ -348,7 +338,7 @@ class HttpProtocol(asyncio.Protocol):
             self.log.debug(
                 'Exception:\n{}'.format(traceback.format_exc()))
         else:
-            exception = self._server_error(message)
+            exception = (500, message)
             self.write_error(exception)
             self.log.error(message)
 
