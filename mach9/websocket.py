@@ -1,6 +1,7 @@
 import websockets
 from websockets.protocol import WebSocketCommonProtocol
 from httptools import parse_url
+from typing import List
 
 
 class ReplyChannel:
@@ -15,7 +16,8 @@ class ReplyChannel:
             if not self._accept:
                 self._websocket_protocol.close()
                 return
-            self._websocket_protocol.accept()
+            accept_content = self._websocket_protocol.get_accept_content()
+            self._websocket_protocol.transport.write(accept_content)
             self._websocket_protocol.loop.create_task(
                 self._websocket_protocol.read())
         if message.get('text'):
@@ -27,7 +29,7 @@ class ReplyChannel:
 
 
 class WebSocketProtocol(WebSocketCommonProtocol):
-    def __init__(self, http_protocol, response_headers,
+    def __init__(self, http_protocol, response_headers: List[List[bytes]],
                  max_size=1000000, max_queue=100000):
         super().__init__(max_size=max_size, max_queue=max_queue,
                          loop=http_protocol.loop)
@@ -44,12 +46,12 @@ class WebSocketProtocol(WebSocketCommonProtocol):
         self.response_headers = None
         self.channels = None
 
-    def accept(self):
+    def get_accept_content(self):
         content = b'HTTP/1.1 101 Switching Protocols\r\n'
         for key, value in self.response_headers:
             content += key + b': ' + value + b'\r\n'
         content += b'\r\n'
-        self.transport.write(content)
+        return content
 
     def get_connect_message(self, transport, http_version, method, url,
                             headers):
