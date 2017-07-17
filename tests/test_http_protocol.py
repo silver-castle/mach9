@@ -1,6 +1,7 @@
 from mach9.http import HttpProtocol
 from tests.utils import Transport
 
+
 def test_check_headers():
     protocol = HttpProtocol(loop=None, request_handler=None)
     result_headers = protocol.check_headers([])
@@ -116,7 +117,7 @@ def test_get_message():
         '1.1',
         b'GET',
         b'http://127.0.0.1:1234/foo/bar?key1=1&key2=2',
-        [[b'k1', 'v1']])
+        [[b'k1', b'v1']])
     assert message['channel'] == 'http.request'
     assert message['reply_channel'] is None
     assert message['http_version'] == '1.1'
@@ -124,7 +125,7 @@ def test_get_message():
     assert message['scheme'] == 'http'
     assert message['query_string'] == b'key1=1&key2=2'
     assert message['root_path'] == ''
-    assert message['headers'] == [[b'k1', 'v1']]
+    assert message['headers'] == [[b'k1', b'v1']]
     assert message['body'] == b''
     assert message['body_channel'] is None
     assert message['client'] == ('127.0.0.1', 1234)
