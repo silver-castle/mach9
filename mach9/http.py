@@ -51,9 +51,7 @@ class HttpProtocol(asyncio.Protocol):
     def __init__(self, *, loop, request_handler: Awaitable,
                  log=None, signal=None, connections=set(), request_timeout=60,
                  request_max_size=None, has_log=True,
-                 keep_alive=True, netlog=None,
-                 _request_timeout=None, _payload_too_large=None,
-                 _invalid_usage=None, _server_error=None):
+                 keep_alive=True, netlog=None):
         '''signal is shared'''
         self.loop = loop
         self.transport = None
