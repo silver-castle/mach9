@@ -1,5 +1,16 @@
-from mach9.http import HttpProtocol
+import pytest
+
+from mach9.http import HttpProtocol, BodyChannel
 from tests.utils import Transport
+
+
+@pytest.mark.asyncio
+async def test_body_channel_send():
+    body_channel = BodyChannel()
+    i = 1
+    await body_channel.send(i)
+    o = await body_channel.receive()
+    assert i == o
 
 
 def test_check_headers():
