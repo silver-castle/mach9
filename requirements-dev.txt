@@ -10,3 +10,4 @@ ujson
 uvloop
 websockets
 pytest-cov
+pytest-asyncio
