@@ -3,6 +3,17 @@ from mach9.websocket import WebSocketProtocol
 from tests.utils import Transport
 
 
+def test_cleanup():
+    http_protocol = HttpProtocol(loop=None, request_handler=None)
+    headers = [[b'foo', b'bar']]
+    websocket_protocol = WebSocketProtocol(http_protocol, headers)
+    websocket_protocol.cleanup()
+    assert websocket_protocol.request_handler is None
+    assert websocket_protocol.transport is None
+    assert websocket_protocol.response_headers is None
+    assert websocket_protocol.channels is None
+
+
 def test_accept_content():
     http_protocol = HttpProtocol(loop=None, request_handler=None)
     headers = [[b'foo', b'bar']]
