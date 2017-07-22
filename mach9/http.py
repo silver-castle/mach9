@@ -12,13 +12,22 @@ from mach9.timer import get_current_time
 
 class BodyChannel(asyncio.Queue):
 
-    def __init__(self):
+    def __init__(self, transport):
         super().__init__()
+        self._transport = transport
+        self._max_qsize = 10
+        self._is_reading = True
 
-    def send(self, body_chunk):
-        return self.put(body_chunk)
+    async def send(self, body_chunk):
+        self.put_nowait(body_chunk)
+        if self._is_reading and self.qsize() >= self._max_qsize:
+            self._transport.pause_reading()
+            self._is_reading = False
 
     def receive(self):
+        if not self._is_reading:
+            self._transport.resume_reading()
+            self._is_reading = True
         return self.get()
 
 
@@ -159,7 +168,7 @@ class HttpProtocol(asyncio.Protocol):
         self.message = self.get_message(
             self.transport, self.parser.get_http_version(),
             self.parser.get_method(), self.url, self.headers)
-        channels['body'] = BodyChannel()
+        channels['body'] = BodyChannel(self.transport)
         channels['reply'] = ReplyChannel(self)
         self.body_channel = channels['body']
         self._request_handler_task = self.loop.create_task(
