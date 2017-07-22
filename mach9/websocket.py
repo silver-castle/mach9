@@ -104,7 +104,7 @@ class WebSocketProtocol(WebSocketCommonProtocol):
             message['bytes'] = data
         return message
 
-    def get_disconnect_message(self, code):
+    def get_disconnect_message(self, code: int):
         '''
         http://channels.readthedocs.io/en/stable/asgi/www.html#disconnection
         '''
