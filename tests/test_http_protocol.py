@@ -6,7 +6,8 @@ from tests.utils import Transport
 
 @pytest.mark.asyncio
 async def test_body_channel_send():
-    body_channel = BodyChannel()
+    transport = Transport()
+    body_channel = BodyChannel(transport)
     i = 1
     await body_channel.send(i)
     o = await body_channel.receive()
