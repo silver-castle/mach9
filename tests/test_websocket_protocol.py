@@ -60,3 +60,23 @@ def test_get_receive_message():
     assert message2['order'] == 2
     assert message2['text'] is None
     assert message2['bytes'] == b'bytes'
+
+
+def test_get_disconnect_message():
+    http_protocol = HttpProtocol(loop=None, request_handler=None)
+    headers = [[b'foo', b'bar']]
+    websocket_protocol = WebSocketProtocol(http_protocol, headers)
+    transport = Transport()
+    websocket_protocol.get_connect_message(
+        transport,
+        '1.1',
+        b'GET',
+        b'ws://127.0.0.1:1234/foo/bar?key1=1&key2=2',
+        [[b'k1', b'v1']])
+    websocket_protocol.order = 0
+    message = websocket_protocol.get_disconnect_message(1000)
+    assert message['channel'] == 'websocket.disconnect'
+    assert message['reply_channel'] is None
+    assert message['path'] == '/foo/bar'
+    assert message['order'] == 1
+    assert message['code'] == 1000
