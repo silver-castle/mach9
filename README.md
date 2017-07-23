@@ -1,6 +1,7 @@
 # Mach9
 
 Mach9 is a web application framework based [ASGI](http://channels.readthedocs.io/en/stable/asgi.html) and `async/await`.  
+Mach9 supports Http and WebSocket.  
 
 ## Features
 
