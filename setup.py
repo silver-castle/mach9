@@ -6,7 +6,7 @@ setup_kwargs = {
     'author': '38elements',
     'url': 'https://github.com/silver-castle/mach9',
     'description': 'a web application framework based ASGI and async/await.',
-    'version': '0.0.3',
+    'version': '0.0.4',
     'license': 'MIT License',
     'packages': ['mach9'],
     'classifiers': [
