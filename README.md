@@ -11,30 +11,6 @@ You can integrate Mach9 and [Uvicorn](https://github.com/encode/uvicorn).
 
 Details are [here](https://github.com/silver-castle/mach9-cookbook/blob/master/uvicorn.md).
 
-### Restructrurable
-
-Mach9 is restructrurable framework.  
-Most Mach9's components are independent.  
-You can replace Mach9's components.  
-You can use Mach9's components to making your framework.  
-Mach9 has following components.  
-
-* Blueprints
-* Config
-* Request
-* Response
-* Protocol
-* Router
-* Server
-* Signal
-* Timer
-* ErrorHandler
-* View
-* Exceptions
-* Log
-
-Details are [here](https://github.com/silver-castle/mach9-cookbook/blob/master/restructure.md).
-
 ### Asynchronous
 
 Mach9 is based async/await syntax from Python 3.5.
