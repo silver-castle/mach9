@@ -26,9 +26,8 @@ class Mach9:
 
     def __init__(self, name=None, router=None, error_handler=None,
                  load_env=True, request_class=None, debug=None,
-                 log=None, netlog=None,
-                 log_config=LOGGING,
-                 get_current_time=None, composition_view=None,
+                 log=None, netlog=None, log_config=LOGGING,
+                 composition_view_class=None,
                  stream_http_response_class=None,
                  websocket_response_class=None):
 
@@ -52,7 +51,7 @@ class Mach9:
             frame_records = stack()[1]
             name = getmodulename(frame_records[1])
 
-        _composition_view = composition_view or CompositionView
+        _composition_view_class = composition_view_class or CompositionView
 
         self.config = config = Config(load_env=load_env)
         self.request_max_size = config.REQUEST_MAX_SIZE
@@ -60,8 +59,8 @@ class Mach9:
         self.keep_alive = config.KEEP_ALIVE
         self.name = name
         self.websocket_channels = {}
-        self.composition_view_class = _composition_view
-        self.router = router or Router(_composition_view)
+        self.composition_view_class = _composition_view_class
+        self.router = router or Router(_composition_view_class)
         self.request_class = request_class or Request
         self.error_handler = error_handler or ErrorHandler(self.log)
         self.debug = debug
